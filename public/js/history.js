@@ -3,8 +3,12 @@
  * 生成履歴の取得と表示
  */
 
-// APIのベースURL（WorkersのURLに変更してください）
-const API_BASE_URL = ''; // ローカル開発時は空文字、本番ではWorkersのURL
+// APIのベースURL
+// ローカル開発時: http://localhost:8787
+// 本番環境: Cloudflare WorkersのURL
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8787'
+  : 'https://image-generation-api.tkwshnsk.workers.dev';
 
 /**
  * ページ読み込み時の初期化

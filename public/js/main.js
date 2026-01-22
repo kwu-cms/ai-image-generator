@@ -3,8 +3,12 @@
  * 画像生成フォームの処理
  */
 
-// APIのベースURL（WorkersのURLに変更してください）
-const API_BASE_URL = ''; // ローカル開発時は空文字、本番ではWorkersのURL
+// APIのベースURL
+// ローカル開発時: http://localhost:8787
+// 本番環境: Cloudflare WorkersのURL
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8787'
+  : 'https://image-generation-api.tkwshnsk.workers.dev';
 
 /**
  * ページ読み込み時の初期化
@@ -50,11 +54,12 @@ async function handleSubmit(event) {
             body: JSON.stringify({ prompt }),
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-            throw new Error(data.error || '画像の生成に失敗しました');
+            const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
         }
+
+        const data = await response.json();
 
         // 結果の表示
         resultImageContainer.innerHTML = `
@@ -70,7 +75,15 @@ async function handleSubmit(event) {
 
     } catch (error) {
         console.error('Error:', error);
-        showError(error.message || 'エラーが発生しました');
+        let errorMessage = 'エラーが発生しました';
+        
+        if (error.message) {
+            errorMessage = error.message;
+        } else if (error instanceof TypeError && error.message.includes('fetch')) {
+            errorMessage = 'APIサーバーに接続できません。Workersが起動しているか確認してください。';
+        }
+        
+        showError(errorMessage);
     } finally {
         generateBtn.disabled = false;
         generateBtn.textContent = '画像を生成';
