@@ -106,6 +106,9 @@ async function handleGenerate(request, env) {
   });
 
   try {
+    // 生成開始時間を記録
+    const startTime = Date.now();
+    
     // DALL-E APIで画像生成
     const response = await openai.images.generate({
     model: 'dall-e-3',
@@ -116,6 +119,9 @@ async function handleGenerate(request, env) {
   });
 
     const imageUrl = response.data[0].url;
+    
+    // 画像ダウンロード開始時間
+    const downloadStartTime = Date.now();
 
     // 生成された画像をダウンロード
     const imageResponse = await fetch(imageUrl);
@@ -123,14 +129,19 @@ async function handleGenerate(request, env) {
       throw new Error('画像のダウンロードに失敗しました');
     }
     const imageBuffer = await imageResponse.arrayBuffer();
+    
+    // ダウンロード完了時間
+    const downloadEndTime = Date.now();
 
     // R2に画像をアップロード
+    const uploadStartTime = Date.now();
     const fileName = `images/${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
     await env.R2_BUCKET.put(fileName, imageBuffer, {
       httpMetadata: {
         contentType: 'image/png',
       },
     });
+    const uploadEndTime = Date.now();
 
     // R2の公開URLを生成（Workers経由で配信するURL）
     const r2ImageUrl = `/api/image/${fileName}`;
@@ -141,6 +152,12 @@ async function handleGenerate(request, env) {
         'INSERT INTO images (prompt, image_url) VALUES (?, ?)'
       ).bind(prompt, r2ImageUrl).run();
     }
+    
+    // 処理時間を計算（秒単位）
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    const generationTime = ((downloadStartTime - startTime) / 1000).toFixed(1);
+    const downloadTime = ((downloadEndTime - downloadStartTime) / 1000).toFixed(1);
+    const uploadTime = ((uploadEndTime - uploadStartTime) / 1000).toFixed(1);
 
     // レスポンスを返す
     return new Response(
@@ -148,6 +165,12 @@ async function handleGenerate(request, env) {
         success: true,
         prompt: prompt,
         image_url: r2ImageUrl,
+        timing: {
+          total: totalTime,
+          generation: generationTime,
+          download: downloadTime,
+          upload: uploadTime
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

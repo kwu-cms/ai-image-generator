@@ -19,3 +19,4 @@
 ## 運用関連
 
 - **[COST_ESTIMATION.md](./COST_ESTIMATION.md)** - 授業運用における課金額の見積もり
+- **[HISTORY_MANAGEMENT.md](./HISTORY_MANAGEMENT.md)** - 履歴管理の仕組みとデータフロー

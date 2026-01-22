@@ -51,10 +51,18 @@ async function loadHistory() {
         // 履歴の表示
         historyList.innerHTML = data.history.map(item => `
             <div class="history-item">
-                <img src="${API_BASE_URL}${item.image_url}" alt="生成された画像" />
+                <div class="history-item-image">
+                    <img src="${API_BASE_URL}${item.image_url}" alt="生成された画像" loading="lazy" />
+                </div>
                 <div class="history-item-content">
-                    <div class="history-item-prompt">${escapeHtml(item.prompt)}</div>
-                    <div class="history-item-date">${formatDate(item.created_at)}</div>
+                    <div class="history-item-prompt">
+                        <strong>プロンプト:</strong>
+                        <p>${escapeHtml(item.prompt)}</p>
+                    </div>
+                    <div class="history-item-meta">
+                        <div class="history-item-date">${formatDate(item.created_at)}</div>
+                        <div class="history-item-id">ID: ${item.id}</div>
+                    </div>
                 </div>
             </div>
         `).join('');

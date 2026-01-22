@@ -60,13 +60,34 @@ async function handleSubmit(event) {
         }
 
         const data = await response.json();
+        const startTime = performance.now();
 
         // 結果の表示
         resultImageContainer.innerHTML = `
-            <img src="${API_BASE_URL}${data.image_url}" alt="生成された画像" />
+            <img src="${API_BASE_URL}${data.image_url}" alt="生成された画像" 
+                 onload="document.getElementById('timingInfo').style.display='block';" />
         `;
+        
+        let timingHtml = '';
+        if (data.timing) {
+            timingHtml = `
+                <div class="timing-info" id="timingInfo" style="display: none;">
+                    <p><strong>処理時間:</strong> ${data.timing.total}秒</p>
+                    <details>
+                        <summary>詳細</summary>
+                        <ul>
+                            <li>画像生成: ${data.timing.generation}秒</li>
+                            <li>画像ダウンロード: ${data.timing.download}秒</li>
+                            <li>ストレージ保存: ${data.timing.upload}秒</li>
+                        </ul>
+                    </details>
+                </div>
+            `;
+        }
+        
         resultPrompt.innerHTML = `
             <p><strong>プロンプト:</strong> ${escapeHtml(data.prompt)}</p>
+            ${timingHtml}
         `;
         resultSection.style.display = 'block';
 
