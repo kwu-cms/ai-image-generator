@@ -67,6 +67,11 @@
                 <a href="index.html">画像生成</a>
                 <a href="history.html">履歴</a>
                 <a href="guide.html" class="active">ガイド</a>
+                <span class="user-info" id="userInfo" style="display: none;">
+                    <span id="userEmail"></span>
+                    <button class="logout-btn" onclick="logout()">ログアウト</button>
+                </span>
+                <a href="login.html" id="loginLink">ログイン</a>
             </nav>
         </header>
 
@@ -149,5 +154,23 @@
             <p>&copy; 2024 AI画像生成アプリ</p>
         </footer>
     </div>
+    <script src="js/auth.js"></script>
+    <script>
+        // 認証状態を確認してUIを更新
+        (async () => {
+            const user = await getCurrentUser();
+            const userInfo = document.getElementById('userInfo');
+            const loginLink = document.getElementById('loginLink');
+            
+            if (user) {
+                document.getElementById('userEmail').textContent = user.email;
+                userInfo.style.display = 'flex';
+                loginLink.style.display = 'none';
+            } else {
+                userInfo.style.display = 'none';
+                loginLink.style.display = 'inline';
+            }
+        })();
+    </script>
 </body>
 </html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - AI画像生成アプリ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI画像生成アプリ</h1>
+            <nav>
+                <a href="index.html">画像生成</a>
+                <a href="history.html">履歴</a>
+                <a href="guide.html">ガイド</a>
+                <a href="login.html" class="active">ログイン</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="auth-section">
+                <h2>ログイン</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="email">メールアドレス</label>
+                        <input 
+                            type="email" 
+                            id="email" 
+                            name="email" 
+                            placeholder="ka225053@konan-wu.ac.jp"
+                            required
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label for="password">パスワード</label>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            placeholder="4文字以上12文字以下"
+                            required
+                            minlength="4"
+                            maxlength="12"
+                        />
+                    </div>
+                    <button type="submit" id="loginBtn" class="btn-primary">
+                        ログイン
+                    </button>
+                </form>
+                <div class="auth-links">
+                    <p>アカウントをお持ちでない方は <a href="register.html">こちらから登録</a></p>
+                </div>
+                <div id="errorSection" class="error-section" style="display: none;">
+                    <div class="error-message" id="errorMessage"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 AI画像生成アプリ</p>
+        </footer>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/login.js"></script>
+</body>
+</html>

@@ -1,27 +1,30 @@
 {
-  "name": "image-generation-app",
-  "version": "1.0.0",
-  "description": "AI画像生成Webアプリケーション（Cloudflare構成）",
-  "main": "src/worker.js",
-  "scripts": {
-    "dev": "wrangler dev",
-    "dev:pages": "wrangler pages dev public --proxy http://localhost:8787",
-    "deploy": "wrangler deploy",
-    "pages:deploy": "wrangler pages deploy public"
-  },
-  "keywords": [
-    "cloudflare",
-    "workers",
-    "openai",
-    "dall-e",
-    "image-generation"
-  ],
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "wrangler": "^3.0.0"
-  },
-  "dependencies": {
-    "openai": "^4.0.0"
-  }
+    "name": "image-generation-app",
+    "version": "1.0.0",
+    "description": "AI画像生成Webアプリケーション（Cloudflare構成）",
+    "main": "src/worker.js",
+    "scripts": {
+        "dev": "wrangler dev",
+        "dev:pages": "wrangler pages dev public --proxy http://localhost:8787",
+        "deploy": "wrangler deploy",
+        "pages:deploy": "wrangler pages deploy public"
+    },
+    "keywords": [
+        "cloudflare",
+        "workers",
+        "openai",
+        "dall-e",
+        "image-generation"
+    ],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "wrangler": "^3.0.0"
+    },
+    "dependencies": {
+        "openai": "^4.0.0"
+    },
+    "optionalDependencies": {
+        "bcryptjs": "^2.4.3"
+    }
 }

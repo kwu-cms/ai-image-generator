@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>生成履歴 - AI画像生成アプリ</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -14,6 +16,11 @@
                 <a href="index.html">画像生成</a>
                 <a href="history.html" class="active">履歴</a>
                 <a href="guide.html">ガイド</a>
+                <span class="user-info" id="userInfo" style="display: none;">
+                    <span id="userEmail"></span>
+                    <button class="logout-btn" onclick="logout()">ログアウト</button>
+                </span>
+                <a href="login.html" id="loginLink">ログイン</a>
             </nav>
         </header>
 
@@ -44,4 +51,5 @@
 
     <script src="js/history.js"></script>
 </body>
+
 </html>

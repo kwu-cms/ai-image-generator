@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI画像生成アプリ</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -14,6 +16,11 @@
                 <a href="index.html" class="active">画像生成</a>
                 <a href="history.html">履歴</a>
                 <a href="guide.html">ガイド</a>
+                <span class="user-info" id="userInfo" style="display: none;">
+                    <span id="userEmail"></span>
+                    <button class="logout-btn" onclick="logout()">ログアウト</button>
+                </span>
+                <a href="login.html" id="loginLink">ログイン</a>
             </nav>
         </header>
 
@@ -23,13 +30,8 @@
                 <form id="generateForm">
                     <div class="form-group">
                         <label for="prompt">プロンプト（画像の説明を入力）</label>
-                        <textarea 
-                            id="prompt" 
-                            name="prompt" 
-                            rows="4" 
-                            placeholder="例: 美しい夕日の風景、山と湖、アニメスタイル"
-                            required
-                        ></textarea>
+                        <textarea id="prompt" name="prompt" rows="4" placeholder="例: 美しい夕日の風景、山と湖、アニメスタイル"
+                            required></textarea>
                     </div>
                     <button type="submit" id="generateBtn" class="btn-primary">
                         画像を生成
@@ -61,4 +63,5 @@
 
     <script src="js/main.js"></script>
 </body>
+
 </html>

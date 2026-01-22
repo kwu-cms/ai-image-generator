@@ -67,19 +67,24 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 **クイックスタート:**
 
 1. **ターミナル1（Workers API）:**
+
    ```bash
    npm run dev
    ```
+
    → `http://localhost:8787`でAPIが起動
 
 2. **ターミナル2（静的ファイル）:**
+
    ```bash
    cd public
    npx http-server -p 8080 --cors
    ```
+
    → `http://localhost:8080`でフロントエンドが起動
 
 3. **ブラウザでアクセス:**
+
    ```
    http://localhost:8080
    ```

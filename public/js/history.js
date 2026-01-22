@@ -7,13 +7,17 @@
 // ローカル開発時: http://localhost:8787
 // 本番環境: Cloudflare WorkersのURL
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:8787'
-  : 'https://image-generation-api.tkwshnsk.workers.dev';
+    ? 'http://localhost:8787'
+    : 'https://image-generation-api.tkwshnsk.workers.dev';
 
 /**
  * ページ読み込み時の初期化
  */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // 認証チェック
+    const user = await requireAuth();
+    if (!user) return;
+
     loadHistory();
 });
 
@@ -33,7 +37,9 @@ async function loadHistory() {
     errorSection.style.display = 'none';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/history`);
+        const response = await fetch(`${API_BASE_URL}/api/history`, {
+            credentials: 'include',
+        });
         const data = await response.json();
 
         if (!response.ok) {

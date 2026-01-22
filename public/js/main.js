@@ -7,13 +7,17 @@
 // ローカル開発時: http://localhost:8787
 // 本番環境: Cloudflare WorkersのURL
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:8787'
-  : 'https://image-generation-api.tkwshnsk.workers.dev';
+    ? 'http://localhost:8787'
+    : 'https://image-generation-api.tkwshnsk.workers.dev';
 
 /**
  * ページ読み込み時の初期化
  */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // 認証チェック
+    const user = await requireAuth();
+    if (!user) return;
+
     const form = document.getElementById('generateForm');
     form.addEventListener('submit', handleSubmit);
 });
@@ -51,6 +55,7 @@ async function handleSubmit(event) {
             headers: {
                 'Content-Type': 'application/json',
             },
+            credentials: 'include',
             body: JSON.stringify({ prompt }),
         });
 
@@ -67,7 +72,7 @@ async function handleSubmit(event) {
             <img src="${API_BASE_URL}${data.image_url}" alt="生成された画像" 
                  onload="document.getElementById('timingInfo').style.display='block';" />
         `;
-        
+
         let timingHtml = '';
         if (data.timing) {
             timingHtml = `
@@ -84,7 +89,7 @@ async function handleSubmit(event) {
                 </div>
             `;
         }
-        
+
         resultPrompt.innerHTML = `
             <p><strong>プロンプト:</strong> ${escapeHtml(data.prompt)}</p>
             ${timingHtml}
@@ -97,13 +102,13 @@ async function handleSubmit(event) {
     } catch (error) {
         console.error('Error:', error);
         let errorMessage = 'エラーが発生しました';
-        
+
         if (error.message) {
             errorMessage = error.message;
         } else if (error instanceof TypeError && error.message.includes('fetch')) {
             errorMessage = 'APIサーバーに接続できません。Workersが起動しているか確認してください。';
         }
-        
+
         showError(errorMessage);
     } finally {
         generateBtn.disabled = false;

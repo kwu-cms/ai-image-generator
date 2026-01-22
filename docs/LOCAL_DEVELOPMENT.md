@@ -123,8 +123,32 @@ fetch('http://localhost:8787/api/generate', {
 
 ### 静的ファイルサーバーが起動しない
 
-- ポート8080が使用されていないか確認
-- 別のポートを指定：`npx http-server -p 3000 --cors`
+**エラー: `EADDRINUSE: address already in use`**
+
+ポート8080が既に使用されている場合：
+
+1. **別のポートを使用（推奨）:**
+   ```bash
+   npx http-server -p 3000 --cors
+   ```
+   または
+   ```bash
+   npx http-server -p 8081 --cors
+   ```
+
+2. **既存のプロセスを終了:**
+   ```bash
+   # ポート8080を使用しているプロセスを確認
+   lsof -ti:8080
+   
+   # プロセスを終了（PIDを確認してから）
+   kill -9 <PID>
+   ```
+
+3. **使用可能なポートを確認:**
+   ```bash
+   lsof -i :8080
+   ```
 
 ### APIに接続できない
 

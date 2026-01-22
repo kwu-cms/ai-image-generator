@@ -107,7 +107,8 @@ textarea:focus {
 }
 
 /* ボタン */
-button, .btn-primary {
+button,
+.btn-primary {
     background-color: #2563eb;
     color: #fff;
     border: none;
@@ -120,7 +121,8 @@ button, .btn-primary {
     display: inline-block;
 }
 
-button:hover, .btn-primary:hover {
+button:hover,
+.btn-primary:hover {
     background-color: #1d4ed8;
 }
 
@@ -178,8 +180,13 @@ button:disabled {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* エラー表示 */
@@ -293,6 +300,80 @@ button:disabled {
 .empty-message p {
     margin-bottom: 20px;
     font-size: 18px;
+}
+
+/* 認証セクション */
+.auth-section {
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.auth-links {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.auth-links a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.auth-links a:hover {
+    text-decoration: underline;
+}
+
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 16px;
+    font-family: inherit;
+    transition: border-color 0.3s;
+}
+
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="text"]:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: #6b7280;
+    font-size: 12px;
+}
+
+/* ユーザー情報表示 */
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-left: auto;
+}
+
+.user-info span {
+    color: #374151;
+    font-size: 14px;
+}
+
+.logout-btn {
+    background-color: #dc2626;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.logout-btn:hover {
+    background-color: #b91c1c;
 }
 
 /* フッター */
