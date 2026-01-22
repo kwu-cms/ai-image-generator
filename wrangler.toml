@@ -5,12 +5,10 @@ main = "src/worker.js"
 compatibility_date = "2024-01-01"
 
 # D1データベース設定
-# 実装時に `wrangler d1 create image-generation-db` で作成後、
-# 以下の行のコメントを外してデータベースIDを設定してください
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "image-generation-db"
-# database_id = "your-database-id-here"
+[[d1_databases]]
+binding = "DB"
+database_name = "image-generation-db"
+database_id = "d5738698-efff-441e-9b40-938939bdee9a"
 
 # R2ストレージ設定
 [[r2_buckets]]
