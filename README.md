@@ -10,18 +10,7 @@ OpenAI DALL-E APIを使用した画像生成Webアプリケーションです。
 
 ## 注意事項
 
-### OpenAI APIの課金について
-
-- OpenAI APIは使用量ベースの課金です
-- 新規アカウントには無料クレジット（$5程度）が付与されることがあります
-- クレジットを使い切ると、課金設定が必要になります
-- DALL-E 3の料金: 画像1枚あたり約$0.04〜$0.12（サイズによる）
-
-**エラー「Billing hard limit has been reached」が表示される場合：**
-
-1. [OpenAI Usage](https://platform.openai.com/usage) でクレジット残高を確認
-2. 支払い方法を登録する必要がある場合があります
-3. 使用量制限を確認・調整してください
+OpenAI APIの課金に関する詳細は [docs/COST_ESTIMATION.md](./docs/COST_ESTIMATION.md) を参照してください。
 
 ## 技術スタック
 
