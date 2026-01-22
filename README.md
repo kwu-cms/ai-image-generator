@@ -33,7 +33,9 @@ OpenAI DALL-E APIを使用した画像生成Webアプリケーションです。
 
 ## セットアップ手順
 
-詳細なセットアップ手順は [SETUP_GUIDE.md](./SETUP_GUIDE.md) を参照してください。
+詳細なセットアップ手順は [docs/SETUP_GUIDE.md](./docs/SETUP_GUIDE.md) を参照してください。
+
+その他のドキュメントは [docs/](./docs/) ディレクトリを参照してください。
 
 ### 1. 依存関係のインストール
 
@@ -132,6 +134,10 @@ npm run pages:deploy
 │   └── js/
 │       ├── main.js         # メインページのJavaScript
 │       └── history.js      # 履歴ページのJavaScript
+├── docs/                   # ドキュメント
+│   ├── SETUP_GUIDE.md      # セットアップ手順
+│   ├── PROMPT_GUIDE.md     # プロンプトガイド
+│   └── ...                 # その他のドキュメント
 ├── .dev.vars               # ローカル開発用環境変数
 ├── .gitignore
 └── README.md               # このファイル

@@ -41,7 +41,7 @@ export default {
         return await handleImage(path, env);
       }
 
-      // 404エラー
+      // 404エラー（静的ファイルはwrangler.tomlの[site]設定で配信）
       return new Response('Not Found', { 
         status: 404,
         headers: corsHeaders 
@@ -64,7 +64,19 @@ export default {
  */
 async function handleGenerate(request, env) {
   // リクエストボディの取得
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: 'リクエストボディの解析に失敗しました' }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+  
   const { prompt } = body;
 
   if (!prompt || prompt.trim() === '') {
@@ -77,13 +89,25 @@ async function handleGenerate(request, env) {
     );
   }
 
+  // OpenAI APIキーの確認
+  if (!env.OPENAI_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: 'OpenAI APIキーが設定されていません' }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+
   // OpenAI APIクライアントの初期化
   const openai = new OpenAI({
     apiKey: env.OPENAI_API_KEY,
   });
 
-  // DALL-E APIで画像生成
-  const response = await openai.images.generate({
+  try {
+    // DALL-E APIで画像生成
+    const response = await openai.images.generate({
     model: 'dall-e-3',
     prompt: prompt,
     n: 1,
@@ -91,43 +115,57 @@ async function handleGenerate(request, env) {
     quality: 'standard',
   });
 
-  const imageUrl = response.data[0].url;
+    const imageUrl = response.data[0].url;
 
-  // 生成された画像をダウンロード
-  const imageResponse = await fetch(imageUrl);
-  const imageBuffer = await imageResponse.arrayBuffer();
-
-  // R2に画像をアップロード
-  const fileName = `images/${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
-  await env.R2_BUCKET.put(fileName, imageBuffer, {
-    httpMetadata: {
-      contentType: 'image/png',
-    },
-  });
-
-  // R2の公開URLを生成（カスタムドメインまたはR2の公開URL）
-  // 注意: R2バケットを公開設定にするか、Workers経由で配信する必要があります
-  // ここでは、Workers経由で配信するURLを生成します
-  const r2ImageUrl = `/api/image/${fileName}`;
-
-  // データベースに保存
-  if (env.DB) {
-    await env.DB.prepare(
-      'INSERT INTO images (prompt, image_url) VALUES (?, ?)'
-    ).bind(prompt, r2ImageUrl).run();
-  }
-
-  // レスポンスを返す
-  return new Response(
-    JSON.stringify({
-      success: true,
-      prompt: prompt,
-      image_url: r2ImageUrl,
-    }),
-    {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    // 生成された画像をダウンロード
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error('画像のダウンロードに失敗しました');
     }
-  );
+    const imageBuffer = await imageResponse.arrayBuffer();
+
+    // R2に画像をアップロード
+    const fileName = `images/${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
+    await env.R2_BUCKET.put(fileName, imageBuffer, {
+      httpMetadata: {
+        contentType: 'image/png',
+      },
+    });
+
+    // R2の公開URLを生成（Workers経由で配信するURL）
+    const r2ImageUrl = `/api/image/${fileName}`;
+
+    // データベースに保存
+    if (env.DB) {
+      await env.DB.prepare(
+        'INSERT INTO images (prompt, image_url) VALUES (?, ?)'
+      ).bind(prompt, r2ImageUrl).run();
+    }
+
+    // レスポンスを返す
+    return new Response(
+      JSON.stringify({
+        success: true,
+        prompt: prompt,
+        image_url: r2ImageUrl,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  } catch (error) {
+    console.error('OpenAI API Error:', error);
+    return new Response(
+      JSON.stringify({ 
+        error: error.message || '画像の生成に失敗しました',
+        details: error.message
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
 }
 
 /**
@@ -197,3 +235,4 @@ async function handleImage(path, env) {
     });
   }
 }
+

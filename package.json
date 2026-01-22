@@ -5,6 +5,7 @@
   "main": "src/worker.js",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:pages": "wrangler pages dev public --proxy http://localhost:8787",
     "deploy": "wrangler deploy",
     "pages:deploy": "wrangler pages deploy public"
   },
