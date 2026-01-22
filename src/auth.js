@@ -3,24 +3,132 @@
  * パスワードハッシュ化、検証、セッション管理
  */
 
+// PBKDF2設定（Cloudflare Workersの制約を考慮して最大100,000イテレーション）
+const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_HASH_ALGORITHM = 'SHA-256';
+const SALT_LENGTH = 32; // 32バイト（256ビット）のソルト
+
 /**
- * パスワードをハッシュ化（Web Crypto API使用）
+ * ランダムなソルトを生成
+ */
+function generateSalt() {
+  const array = new Uint8Array(SALT_LENGTH);
+  crypto.getRandomValues(array);
+  return array;
+}
+
+/**
+ * ArrayBufferを16進数文字列に変換
+ */
+function arrayBufferToHex(buffer) {
+  const array = new Uint8Array(buffer);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * 16進数文字列をArrayBufferに変換
+ */
+function hexToArrayBuffer(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * パスワードをPBKDF2でハッシュ化（ソルト付き）
+ * 形式: pbkdf2:iterations:salt:hash
  */
 export async function hashPassword(password) {
   const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
+  const passwordData = encoder.encode(password);
+  
+  // ランダムなソルトを生成
+  const salt = generateSalt();
+  
+  // インポートキーを作成
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    passwordData,
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  
+  // PBKDF2でハッシュを生成
+  const hashBuffer = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: PBKDF2_HASH_ALGORITHM,
+    },
+    keyMaterial,
+    256 // 256ビット（32バイト）のハッシュ
+  );
+  
+  // ソルトとハッシュを16進数文字列に変換
+  const saltHex = arrayBufferToHex(salt);
+  const hashHex = arrayBufferToHex(hashBuffer);
+  
+  // 形式: pbkdf2:iterations:salt:hash
+  return `pbkdf2:${PBKDF2_ITERATIONS}:${saltHex}:${hashHex}`;
 }
 
 /**
  * パスワードを検証
+ * 後方互換性のため、古いSHA-256ハッシュも検証可能
  */
-export async function verifyPassword(password, hash) {
-  const passwordHash = await hashPassword(password);
-  return passwordHash === hash;
+export async function verifyPassword(password, storedHash) {
+  // 新しいPBKDF2形式かどうかを確認
+  if (storedHash.startsWith('pbkdf2:')) {
+    // 形式: pbkdf2:iterations:salt:hash
+    const parts = storedHash.split(':');
+    if (parts.length !== 4) {
+      return false;
+    }
+    
+    const iterations = parseInt(parts[1], 10);
+    const saltHex = parts[2];
+    const expectedHashHex = parts[3];
+    
+    const encoder = new TextEncoder();
+    const passwordData = encoder.encode(password);
+    const salt = hexToArrayBuffer(saltHex);
+    
+    // インポートキーを作成
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordData,
+      'PBKDF2',
+      false,
+      ['deriveBits']
+    );
+    
+    // PBKDF2でハッシュを生成
+    const hashBuffer = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt: salt,
+        iterations: iterations,
+        hash: PBKDF2_HASH_ALGORITHM,
+      },
+      keyMaterial,
+      256 // 256ビット（32バイト）のハッシュ
+    );
+    
+    const computedHashHex = arrayBufferToHex(hashBuffer);
+    return computedHashHex === expectedHashHex;
+  } else {
+    // 古いSHA-256形式（後方互換性のため）
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex === storedHash;
+  }
 }
 
 /**
@@ -84,8 +192,14 @@ export function getSessionTokenFromRequest(request) {
  * 学籍番号のバリデーション
  */
 export function validateStudentId(studentId) {
-  // aで始まる（2025年度以降）または数字のみ（それ以前）
-  const pattern = /^(a\d{6}|\d{7})$/;
+  // 任意の文字列を許可（空文字列は不可）
+  // 既存形式: aで始まる（2025年度以降）または数字のみ（それ以前）
+  // 新形式: 任意の文字列（例: takawo）
+  if (!studentId || studentId.length === 0) {
+    return false;
+  }
+  // 基本的な文字列チェック（英数字、アンダースコア、ハイフン、ドットを許可）
+  const pattern = /^[a-zA-Z0-9._-]+$/;
   return pattern.test(studentId);
 }
 
@@ -93,10 +207,25 @@ export function validateStudentId(studentId) {
  * メールアドレスのバリデーション
  */
 export function validateEmail(email) {
-  // ka225053@konan-wu.ac.jp または k1524005@konan-wu.ac.jp 形式
-  // k + (a + 6桁の数字 または 7桁の数字) + @konan-wu.ac.jp
-  const pattern = /^k(a\d{6}|\d{7})@konan-wu\.ac\.jp$/;
+  // @konan-wu.ac.jp で終わるメールアドレスを許可
+  // 既存形式: ka225053@konan-wu.ac.jp または k1524005@konan-wu.ac.jp
+  // 新形式: takawo@konan-wu.ac.jp など任意のローカル部分
+  const pattern = /^[a-zA-Z0-9._-]+@konan-wu\.ac\.jp$/;
   return pattern.test(email);
+}
+
+/**
+ * メールアドレスから学籍番号を抽出
+ * @param {string} email - メールアドレス（例: ka225053@konan-wu.ac.jp または takawo@konan-wu.ac.jp）
+ * @returns {string|null} - 学籍番号（例: a225053, 1524005, takawo）、無効な場合はnull
+ */
+export function extractStudentIdFromEmail(email) {
+  // @konan-wu.ac.jp で終わるメールアドレスからローカル部分を抽出
+  const match = email.match(/^([a-zA-Z0-9._-]+)@konan-wu\.ac\.jp$/);
+  if (!match) {
+    return null;
+  }
+  return match[1]; // メールアドレスのローカル部分（@の前）
 }
 
 /**
@@ -104,14 +233,10 @@ export function validateEmail(email) {
  */
 export function validateEmailStudentIdMatch(email, studentId) {
   // メールアドレスから学籍番号部分を抽出
-  // ka225053@konan-wu.ac.jp → a225053
-  // k1524005@konan-wu.ac.jp → 1524005
-  const match = email.match(/^k(a\d{6}|\d{7})@konan-wu\.ac\.jp$/);
-  if (!match) {
+  const emailStudentId = extractStudentIdFromEmail(email);
+  if (!emailStudentId) {
     return false;
   }
-  
-  const emailStudentId = match[1]; // メールアドレスから抽出した学籍番号部分
   
   // 学籍番号と一致するか確認
   return emailStudentId === studentId;
@@ -123,4 +248,13 @@ export function validateEmailStudentIdMatch(email, studentId) {
 export function validatePassword(password) {
   // 4文字以上12文字以下
   return password.length >= 4 && password.length <= 12;
+}
+
+/**
+ * パスワードリセットトークンを生成
+ */
+export function generateResetToken() {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }

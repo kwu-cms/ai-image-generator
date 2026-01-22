@@ -8,6 +8,7 @@ import {
     hashPassword,
     verifyPassword,
     generateSessionToken,
+    generateResetToken,
     saveSession,
     getSession,
     deleteSession,
@@ -15,7 +16,7 @@ import {
     validateStudentId,
     validateEmail,
     validatePassword,
-    validateEmailStudentIdMatch,
+    extractStudentIdFromEmail,
 } from './auth.js';
 
 // CORS設定
@@ -53,6 +54,12 @@ export default {
             if (path === '/api/auth/me' && request.method === 'GET') {
                 return await handleMe(request, env);
             }
+            if (path === '/api/auth/reset-request' && request.method === 'POST') {
+                return await handleResetRequest(request, env);
+            }
+            if (path === '/api/auth/reset-password' && request.method === 'POST') {
+                return await handleResetPassword(request, env);
+            }
 
             // 画像生成API（認証必須）
             if (path === '/api/generate' && request.method === 'POST') {
@@ -76,6 +83,11 @@ export default {
                     );
                 }
                 return await handleHistory(env, user);
+            }
+
+            // 全画像取得API（認証不要）
+            if (path === '/api/images' && request.method === 'GET') {
+                return await handleAllImages(env);
             }
 
             // 画像配信API（R2から画像を取得）
@@ -140,19 +152,12 @@ async function handleRegister(request, env) {
         );
     }
 
-    const { email, studentId, password } = body;
+    const { email, password } = body;
 
     // バリデーション
     if (!email || !validateEmail(email)) {
         return new Response(
             JSON.stringify({ error: '有効なメールアドレスを入力してください（例: ka225053@konan-wu.ac.jp）' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-    }
-
-    if (!studentId || !validateStudentId(studentId)) {
-        return new Response(
-            JSON.stringify({ error: '有効な学籍番号を入力してください（例: a225053 または 1524005）' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }
@@ -164,10 +169,11 @@ async function handleRegister(request, env) {
         );
     }
 
-    // メールアドレスと学籍番号の整合性をチェック
-    if (!validateEmailStudentIdMatch(email, studentId)) {
+    // メールアドレスから学籍番号を自動抽出
+    const studentId = extractStudentIdFromEmail(email);
+    if (!studentId) {
         return new Response(
-            JSON.stringify({ error: 'メールアドレスと学籍番号が一致しません（例: 学籍番号がa225053の場合、メールアドレスはka225053@konan-wu.ac.jp）' }),
+            JSON.stringify({ error: 'メールアドレスから学籍番号を抽出できませんでした（例: ka225053@konan-wu.ac.jp）' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }
@@ -374,6 +380,172 @@ async function handleMe(request, env) {
 }
 
 /**
+ * パスワード再設定リクエスト処理
+ */
+async function handleResetRequest(request, env) {
+    if (!env.DB) {
+        return new Response(
+            JSON.stringify({ error: 'データベースが設定されていません' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    let body;
+    try {
+        body = await request.json();
+    } catch (error) {
+        return new Response(
+            JSON.stringify({ error: 'リクエストボディの解析に失敗しました' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    const { email } = body;
+
+    if (!email || !validateEmail(email)) {
+        return new Response(
+            JSON.stringify({ error: '有効なメールアドレスを入力してください' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    try {
+        // ユーザーを検索
+        const user = await env.DB.prepare(
+            'SELECT id, email FROM users WHERE email = ?'
+        ).bind(email).first();
+
+        // セキュリティ上の理由で、ユーザーが存在しない場合でも成功メッセージを返す
+        let resetToken = null;
+        if (user) {
+            // リセットトークンを生成
+            resetToken = generateResetToken();
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1時間後
+
+            // データベースにリセットトークンを保存
+            await env.DB.prepare(
+                'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?'
+            ).bind(resetToken, expiresAt.toISOString(), user.id).run();
+
+            // 注意: 本番環境では、ここでメール送信機能を実装する必要があります
+            // 現在は開発用にトークンをログに出力（本番では削除してください）
+            console.log(`[開発用] パスワードリセットトークン: ${resetToken} (ユーザー: ${user.email})`);
+        }
+
+        // セキュリティ上の理由で、常に成功メッセージを返す
+        // 注意: 開発環境ではトークンを返しますが、本番環境では削除してください
+        const responseData = {
+            success: true,
+            message: 'パスワード再設定のリクエストを受け付けました。メールアドレスに再設定リンクを送信しました。',
+        };
+        
+        // 開発用: トークンを返す（本番環境では削除してください）
+        if (resetToken) {
+            responseData.resetToken = resetToken;
+        }
+
+        return new Response(
+            JSON.stringify(responseData),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    } catch (error) {
+        console.error('Reset request error:', error);
+        return new Response(
+            JSON.stringify({ error: 'パスワード再設定リクエストに失敗しました' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+}
+
+/**
+ * パスワード再設定実行処理
+ */
+async function handleResetPassword(request, env) {
+    if (!env.DB) {
+        return new Response(
+            JSON.stringify({ error: 'データベースが設定されていません' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    let body;
+    try {
+        body = await request.json();
+    } catch (error) {
+        return new Response(
+            JSON.stringify({ error: 'リクエストボディの解析に失敗しました' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    const { token, newPassword } = body;
+
+    if (!token) {
+        return new Response(
+            JSON.stringify({ error: 'リセットトークンが必要です' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    if (!newPassword || !validatePassword(newPassword)) {
+        return new Response(
+            JSON.stringify({ error: 'パスワードは4文字以上12文字以下で入力してください' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    try {
+        // トークンでユーザーを検索
+        const user = await env.DB.prepare(
+            'SELECT id, email, reset_token, reset_token_expires FROM users WHERE reset_token = ?'
+        ).bind(token).first();
+
+        if (!user) {
+            return new Response(
+                JSON.stringify({ error: '無効または期限切れのリセットトークンです' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // トークンの有効期限を確認
+        const expiresAt = new Date(user.reset_token_expires);
+        if (expiresAt < new Date()) {
+            // 期限切れトークンをクリア
+            await env.DB.prepare(
+                'UPDATE users SET reset_token = NULL, reset_token_expires = NULL WHERE id = ?'
+            ).bind(user.id).run();
+
+            return new Response(
+                JSON.stringify({ error: 'リセットトークンの有効期限が切れています' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // パスワードをハッシュ化
+        const passwordHash = await hashPassword(newPassword);
+
+        // パスワードを更新し、リセットトークンをクリア
+        await env.DB.prepare(
+            'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?'
+        ).bind(passwordHash, user.id).run();
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                message: 'パスワードの再設定が完了しました',
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    } catch (error) {
+        console.error('Reset password error:', error);
+        return new Response(
+            JSON.stringify({ error: 'パスワードの再設定に失敗しました' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+}
+
+/**
  * 画像生成処理
  */
 async function handleGenerate(request, env, user) {
@@ -528,6 +700,36 @@ async function handleHistory(env, user) {
         JSON.stringify({
             success: true,
             history: result.results || [],
+        }),
+        {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+    );
+}
+
+/**
+ * 全画像取得処理（認証不要）
+ */
+async function handleAllImages(env) {
+    if (!env.DB) {
+        return new Response(
+            JSON.stringify({ error: 'データベースが設定されていません' }),
+            {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+        );
+    }
+
+    // データベースから全画像を取得（新しい順、最大100件）
+    const result = await env.DB.prepare(
+        'SELECT id, prompt, image_url, created_at FROM images ORDER BY created_at DESC LIMIT 100'
+    ).all();
+
+    return new Response(
+        JSON.stringify({
+            success: true,
+            images: result.results || [],
         }),
         {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }

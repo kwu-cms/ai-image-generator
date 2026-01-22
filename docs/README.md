@@ -20,3 +20,7 @@
 
 - **[COST_ESTIMATION.md](./COST_ESTIMATION.md)** - 授業運用における課金額の見積もり
 - **[HISTORY_MANAGEMENT.md](./HISTORY_MANAGEMENT.md)** - 履歴管理の仕組みとデータフロー
+
+## デザイン関連
+
+- **[STYLE_GUIDE.md](./STYLE_GUIDE.md)** - 2026年の最新Webデザイントレンドに基づいたスタイルガイド

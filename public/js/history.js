@@ -55,19 +55,21 @@ async function loadHistory() {
         }
 
         // 履歴の表示
-        historyList.innerHTML = data.history.map(item => `
-            <div class="history-item">
-                <div class="history-item-image">
-                    <img src="${API_BASE_URL}${item.image_url}" alt="生成された画像" loading="lazy" />
-                </div>
-                <div class="history-item-content">
-                    <div class="history-item-prompt">
-                        <strong>プロンプト:</strong>
-                        <p>${escapeHtml(item.prompt)}</p>
-                    </div>
-                    <div class="history-item-meta">
-                        <div class="history-item-date">${formatDate(item.created_at)}</div>
-                        <div class="history-item-id">ID: ${item.id}</div>
+        historyList.innerHTML = data.history.map((item, index) => `
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-custom history-card fade-in-up" style="animation-delay: ${index * 0.1}s;">
+                    <img src="${API_BASE_URL}${item.image_url}" class="card-img-top" alt="生成された画像" loading="lazy" style="object-fit: cover; height: 250px;" />
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title text-gradient">プロンプト</h5>
+                        <p class="card-text flex-grow-1">${escapeHtml(item.prompt)}</p>
+                        <div class="mt-auto pt-3 border-top">
+                            <small class="text-muted d-block">
+                                ${formatDate(item.created_at)}
+                            </small>
+                            <small class="text-muted">
+                                ID: ${item.id}
+                            </small>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -18,7 +18,6 @@ async function handleRegister(event) {
     event.preventDefault();
 
     const email = document.getElementById('email').value.trim();
-    const studentId = document.getElementById('studentId').value.trim();
     const password = document.getElementById('password').value;
     const passwordConfirm = document.getElementById('passwordConfirm').value;
     const registerBtn = document.getElementById('registerBtn');
@@ -26,7 +25,7 @@ async function handleRegister(event) {
     const errorMessage = document.getElementById('errorMessage');
 
     // バリデーション
-    if (!email || !studentId || !password || !passwordConfirm) {
+    if (!email || !password || !passwordConfirm) {
         showError('すべての項目を入力してください');
         return;
     }
@@ -41,22 +40,28 @@ async function handleRegister(event) {
         return;
     }
 
-    // メールアドレスの形式チェック
-    if (!email.match(/^k(a\d{6}|\d{7})@konan-wu\.ac\.jp$/)) {
-        showError('メールアドレスの形式が正しくありません（例: ka225053@konan-wu.ac.jp または k1524005@konan-wu.ac.jp）');
-        return;
+    // メールアドレスの形式チェック（自動補完されていない場合は補完を試みる）
+    let finalEmail = email;
+    if (!email.includes('@')) {
+        // kで始まる8文字（k + 7文字）の場合は自動補完
+        if (email.startsWith('k') && email.length === 8) {
+            const studentPart = email.substring(1);
+            if (/^(a\d{6}|\d{7})$/.test(studentPart)) {
+                finalEmail = email + '@konan-wu.ac.jp';
+                document.getElementById('email').value = finalEmail;
+            }
+        } else {
+            // その他の場合は、@konan-wu.ac.jpを追加
+            if (email.length > 0 && /^[a-zA-Z0-9._-]+$/.test(email)) {
+                finalEmail = email + '@konan-wu.ac.jp';
+                document.getElementById('email').value = finalEmail;
+            }
+        }
     }
-
-    // 学籍番号の形式チェック
-    if (!studentId.match(/^(a\d{6}|\d{7})$/)) {
-        showError('学籍番号の形式が正しくありません（例: a225053 または 1524005）');
-        return;
-    }
-
-    // メールアドレスと学籍番号の整合性チェック
-    const emailMatch = email.match(/^k(a\d{6}|\d{7})@konan-wu\.ac\.jp$/);
-    if (!emailMatch || emailMatch[1] !== studentId) {
-        showError('メールアドレスと学籍番号が一致しません（例: 学籍番号がa225053の場合、メールアドレスはka225053@konan-wu.ac.jp）');
+    
+    // @konan-wu.ac.jp で終わるメールアドレスを許可
+    if (!finalEmail.match(/^[a-zA-Z0-9._-]+@konan-wu\.ac\.jp$/)) {
+        showError('メールアドレスの形式が正しくありません（@konan-wu.ac.jp で終わるメールアドレスを入力してください）');
         return;
     }
 
@@ -72,7 +77,7 @@ async function handleRegister(event) {
                 'Content-Type': 'application/json',
             },
             credentials: 'include',
-            body: JSON.stringify({ email, studentId, password }),
+            body: JSON.stringify({ email: finalEmail, password }),
         });
 
         const data = await response.json();
