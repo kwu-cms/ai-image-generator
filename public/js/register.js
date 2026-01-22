@@ -2,6 +2,16 @@
  * ユーザー登録ページのJavaScript
  */
 
+// APIのベースURL（auth.jsが読み込まれている場合はそれを使用、そうでない場合は定義）
+// auth.jsで既にconst API_BASE_URLが定義されているため、window.API_BASE_URLを直接参照
+if (typeof window.API_BASE_URL === 'undefined') {
+    window.API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:8787'
+        : 'https://image-generation-api.tkwshnsk.workers.dev';
+}
+// auth.jsで既にconst API_BASE_URLが定義されているため、window.API_BASE_URLを直接参照
+// register.js内では window.API_BASE_URL を直接使用する
+
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('registerForm');
     form.addEventListener('submit', handleRegister);
@@ -71,7 +81,9 @@ async function handleRegister(event) {
     registerBtn.textContent = '登録中...';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        console.log('Registering user:', { email: finalEmail, apiUrl: `${window.API_BASE_URL}/api/auth/register` });
+        
+        const response = await fetch(`${window.API_BASE_URL}/api/auth/register`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -80,20 +92,69 @@ async function handleRegister(event) {
             body: JSON.stringify({ email: finalEmail, password }),
         });
 
-        const data = await response.json();
+        console.log('Response status:', response.status, response.statusText);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+        // レスポンスがJSONかどうかを確認
+        const contentType = response.headers.get('content-type');
+        let data;
+        
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Non-JSON response:', text);
+            throw new Error(`サーバーエラー: ${response.status} ${response.statusText} - ${text}`);
+        }
+
+        data = await response.json();
+        console.log('Response data:', data);
 
         if (!response.ok) {
             throw new Error(data.error || 'ユーザー登録に失敗しました');
         }
 
-        // 登録成功
-        alert('ユーザー登録が完了しました。ログインページに移動します。');
-        window.location.href = 'login.html';
+        // 登録成功 - 自動的にログイン状態になる
+        if (data.success) {
+            console.log('Registration successful, redirecting...');
+            
+            // 成功メッセージを表示
+            const successSection = document.createElement('div');
+            successSection.className = 'alert alert-success mt-3 fade-in-up';
+            successSection.id = 'successSection';
+            successSection.innerHTML = `
+                <strong>登録完了！</strong> 自動的にログインしました。TOPページに移動します...
+            `;
+            errorSection.parentElement.insertBefore(successSection, errorSection);
+            
+            // フォームをリセット
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('passwordConfirm').value = '';
+            
+            // 少し待ってからTOPページにリダイレクト
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 1500);
+        } else {
+            throw new Error(data.error || 'ユーザー登録に失敗しました');
+        }
 
     } catch (error) {
-        console.error('Error:', error);
-        showError(error.message || 'ユーザー登録に失敗しました');
-    } finally {
+        console.error('Registration error:', error);
+        console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
+        
+        let errorMessage = 'ユーザー登録に失敗しました';
+        
+        if (error.message) {
+            errorMessage = error.message;
+        } else if (error instanceof TypeError && error.message.includes('fetch')) {
+            errorMessage = `APIサーバーに接続できません。サーバーが起動しているか確認してください。\nAPI URL: ${API_BASE_URL}`;
+        }
+        
+        showError(errorMessage);
         registerBtn.disabled = false;
         registerBtn.textContent = '登録';
     }

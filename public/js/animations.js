@@ -29,8 +29,20 @@ function initScrollAnimations() {
 
     // アニメーション対象要素を監視
     document.querySelectorAll('.fade-in-up, .card, .history-card').forEach(el => {
-        el.style.animationPlayState = 'paused';
-        observer.observe(el);
+        // 既に画面内にある要素は即座にアニメーションを適用
+        const rect = el.getBoundingClientRect();
+        const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+        
+        if (isVisible) {
+            // 既に表示されている要素は即座にanimate-inクラスを追加
+            setTimeout(() => {
+                el.classList.add('animate-in');
+            }, 50);
+        } else {
+            // 画面外の要素はIntersectionObserverで監視
+            el.style.animationPlayState = 'paused';
+            observer.observe(el);
+        }
     });
 }
 

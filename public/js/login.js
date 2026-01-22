@@ -2,6 +2,16 @@
  * ログインページのJavaScript
  */
 
+// APIのベースURL（auth.jsが読み込まれている場合はそれを使用、そうでない場合は定義）
+// auth.jsで既にconst API_BASE_URLが定義されているため、window.API_BASE_URLを直接参照
+if (typeof window.API_BASE_URL === 'undefined') {
+    window.API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:8787'
+        : 'https://image-generation-api.tkwshnsk.workers.dev';
+}
+// auth.jsで既にconst API_BASE_URLが定義されているため、window.API_BASE_URLを直接参照
+// login.js内では window.API_BASE_URL を直接使用する（const API_BASE_URLは定義しない）
+
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('loginForm');
     form.addEventListener('submit', handleLogin);
@@ -34,7 +44,7 @@ async function handleLogin(event) {
     loginBtn.textContent = 'ログイン中...';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        const response = await fetch(`${window.API_BASE_URL}/api/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

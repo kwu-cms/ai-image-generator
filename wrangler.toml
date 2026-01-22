@@ -16,11 +16,13 @@ binding = "R2_BUCKET"
 bucket_name = "image-generation-storage"
 
 # Workers KV設定（セッション管理用）
-# 実装時に `wrangler kv:namespace create "SESSIONS"` で作成後、
-# 以下の行のコメントを外してnamespace_idを設定してください
-# [[kv_namespaces]]
-# binding = "SESSIONS"
-# id = "your-kv-namespace-id-here"
+# ローカル開発: wrangler devで自動的にシミュレートされる
+# 本番環境: `wrangler kv:namespace create "SESSIONS"` で作成後、namespace_idを設定してください
+[[kv_namespaces]]
+binding = "SESSIONS"
+# ローカル開発では任意のIDで動作します（実際のIDは本番環境で設定）
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
 
 # 環境変数（Secretsは `wrangler secret put` で設定）
 # OPENAI_API_KEY - Workers Secretsで設定
