@@ -1,0 +1,34 @@
+# 環境変数ファイル（APIキー等の機密情報）
+.env
+.dev.vars
+*.env
+*.env.local
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ビルド成果物
+dist/
+build/
+.wrangler/
+
+# OS固有ファイル
+.DS_Store
+Thumbs.db
+
+# エディタ設定
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ログファイル
+*.log
+
+# 一時ファイル
+*.tmp
+*.temp

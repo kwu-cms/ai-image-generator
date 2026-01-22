@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生成履歴 - AI画像生成アプリ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI画像生成アプリ</h1>
+            <nav>
+                <a href="index.html">画像生成</a>
+                <a href="history.html" class="active">履歴</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="history-section">
+                <h2>生成履歴</h2>
+                <div id="loading" class="loading">
+                    <p>履歴を読み込み中...</p>
+                    <div class="spinner"></div>
+                </div>
+                <div id="historyContainer" style="display: none;">
+                    <div id="historyList" class="history-list"></div>
+                    <div id="emptyMessage" class="empty-message" style="display: none;">
+                        <p>まだ画像が生成されていません。</p>
+                        <a href="index.html" class="btn-primary">画像を生成する</a>
+                    </div>
+                </div>
+                <div id="errorSection" class="error-section" style="display: none;">
+                    <div class="error-message" id="errorMessage"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 AI画像生成アプリ</p>
+        </footer>
+    </div>
+
+    <script src="js/history.js"></script>
+</body>
+</html>

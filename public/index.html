@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI画像生成アプリ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI画像生成アプリ</h1>
+            <nav>
+                <a href="index.html" class="active">画像生成</a>
+                <a href="history.html">履歴</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="generate-section">
+                <h2>画像を生成</h2>
+                <form id="generateForm">
+                    <div class="form-group">
+                        <label for="prompt">プロンプト（画像の説明を入力）</label>
+                        <textarea 
+                            id="prompt" 
+                            name="prompt" 
+                            rows="4" 
+                            placeholder="例: 美しい夕日の風景、山と湖、アニメスタイル"
+                            required
+                        ></textarea>
+                    </div>
+                    <button type="submit" id="generateBtn" class="btn-primary">
+                        画像を生成
+                    </button>
+                </form>
+            </section>
+
+            <section class="result-section" id="resultSection" style="display: none;">
+                <h2>生成結果</h2>
+                <div id="resultContent">
+                    <div class="loading" id="loading" style="display: none;">
+                        <p>画像を生成中...</p>
+                        <div class="spinner"></div>
+                    </div>
+                    <div id="resultImageContainer"></div>
+                    <div id="resultPrompt"></div>
+                </div>
+            </section>
+
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-message" id="errorMessage"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 AI画像生成アプリ</p>
+        </footer>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Cloudflare Workers設定ファイル
+
+name = "image-generation-api"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+# D1データベース設定
+# 実装時に `wrangler d1 create image-generation-db` で作成後、
+# 以下の行のコメントを外してデータベースIDを設定してください
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "image-generation-db"
+# database_id = "your-database-id-here"
+
+# R2ストレージ設定
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "image-generation-storage"
+
+# 環境変数（Secretsは `wrangler secret put` で設定）
+# OPENAI_API_KEY - Workers Secretsで設定
+# R2_ACCOUNT_ID - Workers Secretsで設定（必要に応じて）
+# R2_ACCESS_KEY_ID - Workers Secretsで設定（必要に応じて）
+# R2_SECRET_ACCESS_KEY - Workers Secretsで設定（必要に応じて）
