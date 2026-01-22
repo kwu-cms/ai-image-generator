@@ -62,34 +62,27 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 
 ### 5. ローカル開発
 
-**方法1: Workersのみ起動（APIテスト用）**
+詳細な手順は [docs/LOCAL_DEVELOPMENT.md](./docs/LOCAL_DEVELOPMENT.md) を参照してください。
 
-```bash
-npm run dev
-```
+**クイックスタート:**
 
-Workersが`http://localhost:8787`で起動します。APIエンドポイントのみ利用可能です。
+1. **ターミナル1（Workers API）:**
+   ```bash
+   npm run dev
+   ```
+   → `http://localhost:8787`でAPIが起動
 
-**方法2: 静的ファイルサーバーとWorkersを同時に起動（推奨）**
+2. **ターミナル2（静的ファイル）:**
+   ```bash
+   cd public
+   npx http-server -p 8080 --cors
+   ```
+   → `http://localhost:8080`でフロントエンドが起動
 
-ターミナル1（Workers API）:
-
-```bash
-npm run dev
-```
-
-ターミナル2（静的ファイル）:
-
-```bash
-# http-serverをインストール（初回のみ）
-npm install -g http-server
-
-# publicディレクトリで静的ファイルを配信
-cd public
-http-server -p 8080 --cors
-```
-
-ブラウザで`http://localhost:8080`にアクセスしてください。
+3. **ブラウザでアクセス:**
+   ```
+   http://localhost:8080
+   ```
 
 ### 6. デプロイ
 
