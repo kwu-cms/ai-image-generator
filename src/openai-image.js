@@ -134,6 +134,20 @@ async function editImageWithOpenAI(prompt, baseImageBuffer, maskBuffer, options,
         error.stage = 'image_validation';
         throw error;
     }
+    
+    // 3. RGBA形式の確認（PNGのカラータイプをチェック）
+    // PNGのIHDRチャンク（オフセット16バイト）からカラータイプを取得
+    // カラータイプ2（RGB）の場合はエラー、カラータイプ6（RGBA）または0（グレースケール）または4（グレースケール+アルファ）を許可
+    if (view.byteLength >= 25) {
+        const colorType = view.getUint8(25); // IHDRチャンクの9バイト目（カラータイプ）
+        // カラータイプ: 0=グレースケール, 2=RGB, 3=インデックスカラー, 4=グレースケール+アルファ, 6=RGBA
+        if (colorType === 2) {
+            // RGB形式（アルファチャンネルなし）はエラー
+            const error = new Error('画像はRGBA形式（アルファチャンネル付きPNG）である必要があります。既存の画像を削除して、新しい画像をアップロードしてください。');
+            error.stage = 'image_validation';
+            throw error;
+        }
+    }
 
     // DALL-E 3ではEditがサポートされていないため、DALL-E 2またはGPT Image APIを使用
     // 現時点ではDALL-E 2のEdit APIを使用（将来的にGPT Image APIに移行可能）

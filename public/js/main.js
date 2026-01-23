@@ -296,12 +296,23 @@ function resizeImage(file, targetWidth, targetHeight) {
                 drawY = (targetHeight - drawHeight) / 2;
             }
             
+            // 背景を透明でクリア（RGBA形式を保証）
+            ctx.clearRect(0, 0, targetWidth, targetHeight);
+            
             // 背景を白で塗りつぶし（RGBA形式を保証）
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, targetWidth, targetHeight);
             
             // 画像を描画（RGBA形式を保証）
             ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+            
+            // ImageDataを取得してRGBA形式を確認・強制
+            const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+            // RGBA形式であることを確認（4チャンネル）
+            if (imageData.data.length === targetWidth * targetHeight * 4) {
+                // RGBA形式で正しい
+                ctx.putImageData(imageData, 0, 0);
+            }
             
             // CanvasをBlobに変換（PNG形式で出力、RGBA形式を保証）
             canvas.toBlob((blob) => {
@@ -346,8 +357,19 @@ function convertToPNGAndCompress(file, maxSizeMB = 4) {
             canvas.height = img.height;
             const ctx = canvas.getContext('2d', { alpha: true }); // アルファチャンネルを有効化
             
+            // 背景を透明でクリア（RGBA形式を保証）
+            ctx.clearRect(0, 0, img.width, img.height);
+            
             // 画像を描画（RGBA形式を保証）
             ctx.drawImage(img, 0, 0);
+            
+            // ImageDataを取得してRGBA形式を確認・強制
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            // RGBA形式であることを確認（4チャンネル）
+            if (imageData.data.length === img.width * img.height * 4) {
+                // RGBA形式で正しい
+                ctx.putImageData(imageData, 0, 0);
+            }
             
             // PNG形式では品質パラメータは無視されるため、リサイズでサイズを調整
             // 4MB以下になるまで画像サイズを縮小
@@ -375,7 +397,14 @@ function convertToPNGAndCompress(file, maxSizeMB = 4) {
                 canvas.height = currentHeight;
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
+                ctx.clearRect(0, 0, currentWidth, currentHeight);
                 ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+                
+                // リサイズ後もRGBA形式を確認
+                const resizedImageData = ctx.getImageData(0, 0, currentWidth, currentHeight);
+                if (resizedImageData.data.length === currentWidth * currentHeight * 4) {
+                    ctx.putImageData(resizedImageData, 0, 0);
+                }
             }
             
             // CanvasをBlobに変換（PNG形式で出力、RGBA形式を保証）
