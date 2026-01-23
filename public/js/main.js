@@ -266,11 +266,11 @@ function resizeImage(file, targetWidth, targetHeight) {
         img.onload = () => {
             URL.revokeObjectURL(url);
             
-            // Canvasを作成
+            // Canvasを作成（RGBA形式を保証）
             const canvas = document.createElement('canvas');
             canvas.width = targetWidth;
             canvas.height = targetHeight;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { alpha: true }); // アルファチャンネルを有効化
             
             // 高品質なリサイズ（smooth scaling）
             ctx.imageSmoothingEnabled = true;
@@ -296,17 +296,17 @@ function resizeImage(file, targetWidth, targetHeight) {
                 drawY = (targetHeight - drawHeight) / 2;
             }
             
-            // 背景を白で塗りつぶし
+            // 背景を白で塗りつぶし（RGBA形式を保証）
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, targetWidth, targetHeight);
             
-            // 画像を描画
+            // 画像を描画（RGBA形式を保証）
             ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
             
-            // CanvasをBlobに変換（PNG形式で出力）
+            // CanvasをBlobに変換（PNG形式で出力、RGBA形式を保証）
             canvas.toBlob((blob) => {
                 if (blob) {
-                    // PNG形式で保存（OpenAI DALL-E 2のEdit API要件）
+                    // PNG形式で保存（OpenAI DALL-E 2のEdit API要件: RGBA形式）
                     const fileName = file.name.replace(/\.[^/.]+$/, '') + '.png';
                     const resizedFile = new File([blob], fileName, {
                         type: 'image/png',
@@ -316,7 +316,7 @@ function resizeImage(file, targetWidth, targetHeight) {
                 } else {
                     reject(new Error('画像のリサイズに失敗しました'));
                 }
-            }, 'image/png', 0.95); // PNG形式、品質95%
+            }, 'image/png'); // PNG形式（RGBA形式を保証、qualityパラメータはPNGでは無視される）
         };
         
         img.onerror = () => {
@@ -340,43 +340,58 @@ function convertToPNGAndCompress(file, maxSizeMB = 4) {
         img.onload = () => {
             URL.revokeObjectURL(url);
             
-            // Canvasを作成（元のサイズを維持）
+            // Canvasを作成（RGBA形式を保証、元のサイズを維持）
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
             canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { alpha: true }); // アルファチャンネルを有効化
             
-            // 画像を描画
+            // 画像を描画（RGBA形式を保証）
             ctx.drawImage(img, 0, 0);
             
-            // 品質を調整しながら4MB以下になるまで圧縮
-            let quality = 0.95;
+            // PNG形式では品質パラメータは無視されるため、リサイズでサイズを調整
+            // 4MB以下になるまで画像サイズを縮小
             const maxSize = maxSizeMB * 1024 * 1024;
+            let currentWidth = img.width;
+            let currentHeight = img.height;
+            let scaleFactor = 1.0;
             
-            const tryCompress = () => {
-                canvas.toBlob((blob) => {
-                    if (!blob) {
-                        reject(new Error('画像の変換に失敗しました'));
-                        return;
-                    }
-                    
-                    // サイズチェック
-                    if (blob.size <= maxSize || quality <= 0.1) {
-                        const fileName = file.name.replace(/\.[^/.]+$/, '') + '.png';
-                        const convertedFile = new File([blob], fileName, {
-                            type: 'image/png',
-                            lastModified: Date.now()
-                        });
-                        resolve(convertedFile);
-                    } else {
-                        // 品質を下げて再試行
-                        quality -= 0.1;
-                        canvas.toBlob(tryCompress, 'image/png', quality);
-                    }
-                }, 'image/png', quality);
+            // 初期サイズをチェック
+            const estimateSize = (width, height) => {
+                // PNG形式のサイズを概算（RGBA形式、4バイト/ピクセル）
+                return width * height * 4;
             };
             
-            tryCompress();
+            // 4MB以下になるまでスケールを調整
+            while (estimateSize(currentWidth, currentHeight) > maxSize && scaleFactor > 0.1) {
+                scaleFactor -= 0.1;
+                currentWidth = Math.floor(img.width * scaleFactor);
+                currentHeight = Math.floor(img.height * scaleFactor);
+            }
+            
+            // リサイズが必要な場合
+            if (scaleFactor < 1.0) {
+                canvas.width = currentWidth;
+                canvas.height = currentHeight;
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+            }
+            
+            // CanvasをBlobに変換（PNG形式で出力、RGBA形式を保証）
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error('画像の変換に失敗しました'));
+                    return;
+                }
+                
+                const fileName = file.name.replace(/\.[^/.]+$/, '') + '.png';
+                const convertedFile = new File([blob], fileName, {
+                    type: 'image/png',
+                    lastModified: Date.now()
+                });
+                resolve(convertedFile);
+            }, 'image/png'); // PNG形式（RGBA形式を保証）
         };
         
         img.onerror = () => {
