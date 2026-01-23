@@ -139,6 +139,30 @@ export default {
                 return await handleImage(request, path, env);
             }
 
+            // 参照画像アップロードAPI（認証必須）
+            if (path === '/api/reference-images/upload' && request.method === 'POST') {
+                const user = await getCurrentUser(request, env);
+                if (!user) {
+                    return new Response(
+                        JSON.stringify({ error: 'ログインが必要です' }),
+                        { status: 401, headers: { ...getCorsHeaders(request), 'Content-Type': 'application/json' } }
+                    );
+                }
+                return await handleReferenceImageUpload(request, env, user);
+            }
+
+            // 参照画像一覧取得API（認証必須）
+            if (path === '/api/reference-images' && request.method === 'GET') {
+                const user = await getCurrentUser(request, env);
+                if (!user) {
+                    return new Response(
+                        JSON.stringify({ error: 'ログインが必要です' }),
+                        { status: 401, headers: { ...getCorsHeaders(request), 'Content-Type': 'application/json' } }
+                    );
+                }
+                return await handleReferenceImagesList(request, env, user);
+            }
+
             // 404エラー（静的ファイルはwrangler.tomlの[site]設定で配信）
             return new Response('Not Found', {
                 status: 404,
@@ -738,6 +762,41 @@ async function handleChangePassword(request, env) {
 }
 
 /**
+ * 役割ラベルの説明を取得
+ */
+function getRoleDescription(role) {
+    const descriptions = {
+        '構図': 'この画像のレイアウトとカメラアングルを維持する',
+        'スタイル': 'この画像の色調とレンダリングスタイルを適用する',
+        '色調': 'この画像の色彩とトーンを反映する',
+        '質感': 'この画像の質感とマテリアル感を再現する',
+        'ディテール': 'この画像の細部の表現方法を参考にする',
+        'その他': 'この画像の特徴を参考にする'
+    };
+    return descriptions[role] || descriptions['その他'];
+}
+
+/**
+ * プロンプトに役割情報を埋め込む
+ */
+function enhancePromptWithRoles(basePrompt, referenceImages) {
+    if (!referenceImages || referenceImages.length === 0) {
+        return basePrompt;
+    }
+    
+    let enhancedPrompt = basePrompt;
+    
+    referenceImages.forEach((ref, index) => {
+        const roleLabel = ref.role || 'その他';
+        const roleDescription = getRoleDescription(roleLabel);
+        const imageLabel = String.fromCharCode(65 + index); // A, B, C...
+        enhancedPrompt += `\n参照画像${imageLabel}（${roleLabel}）：${roleDescription}`;
+    });
+    
+    return enhancedPrompt;
+}
+
+/**
  * 画像生成処理
  */
 async function handleGenerate(request, env, user) {
@@ -756,7 +815,7 @@ async function handleGenerate(request, env, user) {
         );
     }
 
-    const { prompt } = body;
+    const { prompt, referenceImages, generationOptions } = body;
 
     if (!prompt || prompt.trim() === '') {
         return new Response(
@@ -766,6 +825,65 @@ async function handleGenerate(request, env, user) {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             }
         );
+    }
+
+    // 参照画像の処理
+    let processedReferenceImages = [];
+    if (referenceImages && Array.isArray(referenceImages) && referenceImages.length > 0) {
+        // 参照画像数の上限チェック（最大5枚）
+        if (referenceImages.length > 5) {
+            return new Response(
+                JSON.stringify({ error: '参照画像は最大5枚まで指定できます' }),
+                {
+                    status: 400,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                }
+            );
+        }
+
+        // 参照画像の処理
+        for (const refImage of referenceImages) {
+            if (!refImage.role) {
+                return new Response(
+                    JSON.stringify({ error: '参照画像に役割ラベルが指定されていません' }),
+                    {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    }
+                );
+            }
+
+            // 既存画像IDが指定されている場合
+            if (refImage.id) {
+                const existingRef = await env.DB.prepare(
+                    'SELECT id, r2_object_key FROM reference_images WHERE id = ?'
+                ).bind(refImage.id).first();
+
+                if (!existingRef) {
+                    return new Response(
+                        JSON.stringify({ error: `参照画像ID ${refImage.id} が見つかりません` }),
+                        {
+                            status: 404,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        }
+                    );
+                }
+
+                processedReferenceImages.push({
+                    reference_image_id: existingRef.id,
+                    role_label: refImage.role,
+                    r2_object_key: existingRef.r2_object_key
+                });
+            } else {
+                return new Response(
+                    JSON.stringify({ error: '参照画像IDが指定されていません（新規アップロードは別APIを使用してください）' }),
+                    {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    }
+                );
+            }
+        }
     }
 
     // OpenAI APIキーの確認
@@ -788,13 +906,22 @@ async function handleGenerate(request, env, user) {
         // 生成開始時間を記録
         const startTime = Date.now();
 
+        // プロンプトに役割情報を埋め込む
+        const enhancedPrompt = enhancePromptWithRoles(prompt, processedReferenceImages);
+
+        // 生成オプションの設定
+        const size = generationOptions?.size || '1024x1024';
+        const quality = generationOptions?.quality || 'standard';
+        const style = generationOptions?.style || 'vivid';
+
         // DALL-E APIで画像生成
         const response = await openai.images.generate({
             model: 'dall-e-3',
-            prompt: prompt,
+            prompt: enhancedPrompt,
             n: 1,
-            size: '1024x1024',
-            quality: 'standard',
+            size: size,
+            quality: quality,
+            style: style,
         });
 
         const imageUrl = response.data[0].url;
@@ -839,10 +966,24 @@ async function handleGenerate(request, env, user) {
         const r2ImageUrl = `/api/image/${fileName}`;
 
         // データベースに保存（ユーザーIDを含む）
+        let generationId = null;
         if (env.DB) {
-            await env.DB.prepare(
-                'INSERT INTO images (prompt, image_url, user_id) VALUES (?, ?, ?)'
-            ).bind(prompt, r2ImageUrl, user.id).run();
+            const generationOptionsJson = JSON.stringify(generationOptions || {});
+            const result = await env.DB.prepare(
+                'INSERT INTO images (prompt, image_url, user_id, generation_options) VALUES (?, ?, ?, ?)'
+            ).bind(enhancedPrompt, r2ImageUrl, user.id, generationOptionsJson).run();
+            
+            generationId = result.meta.last_row_id;
+
+            // 参照画像との紐づけを保存
+            if (processedReferenceImages.length > 0) {
+                for (let i = 0; i < processedReferenceImages.length; i++) {
+                    const refImage = processedReferenceImages[i];
+                    await env.DB.prepare(
+                        'INSERT INTO generation_reference_images (generation_id, reference_image_id, role_label, display_order) VALUES (?, ?, ?, ?)'
+                    ).bind(generationId, refImage.reference_image_id, refImage.role_label, i).run();
+                }
+            }
         }
 
         // 処理時間を計算（秒単位）
@@ -855,8 +996,15 @@ async function handleGenerate(request, env, user) {
         return new Response(
             JSON.stringify({
                 success: true,
-                prompt: prompt,
+                prompt: enhancedPrompt,
+                original_prompt: prompt,
                 image_url: r2ImageUrl,
+                generation_id: generationId,
+                reference_images: processedReferenceImages.map(ref => ({
+                    reference_image_id: ref.reference_image_id,
+                    role_label: ref.role_label,
+                    image_url: `/api/image/${ref.r2_object_key}`
+                })),
                 timing: {
                     total: totalTime,
                     generation: generationTime,
@@ -900,13 +1048,38 @@ async function handleHistory(request, env, user) {
 
     // データベースからユーザーの履歴を取得（新しい順）
     const result = await env.DB.prepare(
-        'SELECT id, prompt, image_url, created_at FROM images WHERE user_id = ? ORDER BY created_at DESC'
+        'SELECT id, prompt, image_url, generation_options, created_at FROM images WHERE user_id = ? ORDER BY created_at DESC'
     ).bind(user.id).all();
+
+    // 各履歴に参照画像情報を追加
+    const historyWithReferences = await Promise.all((result.results || []).map(async (item) => {
+        // 参照画像を取得
+        const refImagesResult = await env.DB.prepare(
+            `SELECT gri.role_label, gri.display_order, ri.r2_object_key, ri.id as reference_image_id
+             FROM generation_reference_images gri
+             JOIN reference_images ri ON gri.reference_image_id = ri.id
+             WHERE gri.generation_id = ?
+             ORDER BY gri.display_order ASC`
+        ).bind(item.id).all();
+
+        const referenceImages = (refImagesResult.results || []).map(ref => ({
+            reference_image_id: ref.reference_image_id,
+            image_url: `/api/image/${ref.r2_object_key}`,
+            role_label: ref.role_label,
+            display_order: ref.display_order
+        }));
+
+        return {
+            ...item,
+            generation_options: item.generation_options ? JSON.parse(item.generation_options) : null,
+            reference_images: referenceImages
+        };
+    }));
 
     return new Response(
         JSON.stringify({
             success: true,
-            history: result.results || [],
+            history: historyWithReferences,
         }),
         {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -931,13 +1104,38 @@ async function handleAllImages(request, env) {
 
     // データベースから全画像を取得（新しい順、最大100件）
     const result = await env.DB.prepare(
-        'SELECT id, prompt, image_url, created_at FROM images ORDER BY created_at DESC LIMIT 100'
+        'SELECT id, prompt, image_url, generation_options, created_at FROM images ORDER BY created_at DESC LIMIT 100'
     ).all();
+
+    // 各画像に参照画像情報を追加
+    const imagesWithReferences = await Promise.all((result.results || []).map(async (item) => {
+        // 参照画像を取得
+        const refImagesResult = await env.DB.prepare(
+            `SELECT gri.role_label, gri.display_order, ri.r2_object_key, ri.id as reference_image_id
+             FROM generation_reference_images gri
+             JOIN reference_images ri ON gri.reference_image_id = ri.id
+             WHERE gri.generation_id = ?
+             ORDER BY gri.display_order ASC`
+        ).bind(item.id).all();
+
+        const referenceImages = (refImagesResult.results || []).map(ref => ({
+            reference_image_id: ref.reference_image_id,
+            image_url: `/api/image/${ref.r2_object_key}`,
+            role_label: ref.role_label,
+            display_order: ref.display_order
+        }));
+
+        return {
+            ...item,
+            generation_options: item.generation_options ? JSON.parse(item.generation_options) : null,
+            reference_images: referenceImages
+        };
+    }));
 
     return new Response(
         JSON.stringify({
             success: true,
-            images: result.results || [],
+            images: imagesWithReferences,
         }),
         {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1010,6 +1208,197 @@ async function handleImage(request, path, env) {
             status: 500,
             headers: corsHeaders
         });
+    }
+}
+
+/**
+ * SHA-256ハッシュを計算
+ */
+async function calculateSHA256(buffer) {
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * ファイル拡張子を取得
+ */
+function getFileExtension(filename) {
+    const parts = filename.split('.');
+    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'png';
+}
+
+/**
+ * 参照画像アップロード処理
+ */
+async function handleReferenceImageUpload(request, env, user) {
+    const corsHeaders = getCorsHeaders(request);
+    
+    if (!env.R2_BUCKET || !env.DB) {
+        return new Response(
+            JSON.stringify({ error: 'ストレージまたはデータベースが設定されていません' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    try {
+        // FormDataから画像ファイルを取得
+        const formData = await request.formData();
+        const file = formData.get('file');
+        const visibility = formData.get('visibility') || 'private';
+
+        if (!file || !(file instanceof File)) {
+            return new Response(
+                JSON.stringify({ error: '画像ファイルが指定されていません' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // ファイルサイズチェック（最大10MB）
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            return new Response(
+                JSON.stringify({ error: '画像ファイルのサイズが大きすぎます（最大10MB）' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // ファイル形式チェック
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            return new Response(
+                JSON.stringify({ error: 'サポートされていない画像形式です（PNG、JPEG、WebPのみ）' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // 画像データを取得
+        const imageBuffer = await file.arrayBuffer();
+
+        // SHA-256ハッシュを計算
+        const imageHash = await calculateSHA256(imageBuffer);
+
+        // 既存の参照画像をチェック
+        const existingRef = await env.DB.prepare(
+            'SELECT id, r2_object_key FROM reference_images WHERE image_hash = ?'
+        ).bind(imageHash).first();
+
+        if (existingRef) {
+            // 既存の参照画像がある場合は、そのIDとURLを返す
+            const imageUrl = `/api/image/${existingRef.r2_object_key}`;
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    reference_image_id: existingRef.id,
+                    image_url: imageUrl,
+                    image_hash: imageHash,
+                    message: '既存の参照画像を使用します'
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // ファイル拡張子を取得
+        const extension = getFileExtension(file.name);
+        const r2ObjectKey = `reference-images/${imageHash}.${extension}`;
+
+        // R2に画像をアップロード
+        await env.R2_BUCKET.put(r2ObjectKey, imageBuffer, {
+            httpMetadata: {
+                contentType: file.type,
+            },
+        });
+
+        // データベースに保存
+        const result = await env.DB.prepare(
+            'INSERT INTO reference_images (user_id, image_hash, r2_object_key, visibility) VALUES (?, ?, ?, ?)'
+        ).bind(user.id, imageHash, r2ObjectKey, visibility).run();
+
+        const referenceImageId = result.meta.last_row_id;
+        const imageUrl = `/api/image/${r2ObjectKey}`;
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                reference_image_id: referenceImageId,
+                image_url: imageUrl,
+                image_hash: imageHash
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    } catch (error) {
+        console.error('Reference image upload error:', error);
+        return new Response(
+            JSON.stringify({ error: '参照画像のアップロードに失敗しました', details: error.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+}
+
+/**
+ * 参照画像一覧取得処理
+ */
+async function handleReferenceImagesList(request, env, user) {
+    const corsHeaders = getCorsHeaders(request);
+    
+    if (!env.DB) {
+        return new Response(
+            JSON.stringify({ error: 'データベースが設定されていません' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    try {
+        const url = new URL(request.url);
+        const visibility = url.searchParams.get('visibility'); // 'private', 'class_shared', 'teacher_sample', または null（全て）
+
+        let query = 'SELECT id, user_id, image_hash, r2_object_key, visibility, created_at FROM reference_images WHERE ';
+        let params = [];
+
+        // 権限に応じてフィルタリング
+        // ユーザー専用: 自分の画像
+        // クラス共有: visibility='class_shared'の画像
+        // 教員固定サンプル: visibility='teacher_sample'の画像（将来的に教員権限チェックを追加）
+        if (visibility) {
+            if (visibility === 'private') {
+                query += 'user_id = ? AND visibility = ?';
+                params = [user.id, 'private'];
+            } else {
+                query += 'visibility = ?';
+                params = [visibility];
+            }
+        } else {
+            // 全ての参照画像を取得（ユーザー専用 + クラス共有 + 教員固定サンプル）
+            query += '(user_id = ? AND visibility = ?) OR visibility = ? OR visibility = ?';
+            params = [user.id, 'private', 'class_shared', 'teacher_sample'];
+        }
+
+        query += ' ORDER BY created_at DESC';
+
+        const result = await env.DB.prepare(query).bind(...params).all();
+
+        const referenceImages = (result.results || []).map(img => ({
+            id: img.id,
+            user_id: img.user_id,
+            image_hash: img.image_hash,
+            image_url: `/api/image/${img.r2_object_key}`,
+            visibility: img.visibility,
+            created_at: img.created_at
+        }));
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                reference_images: referenceImages
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    } catch (error) {
+        console.error('Reference images list error:', error);
+        return new Response(
+            JSON.stringify({ error: '参照画像一覧の取得に失敗しました', details: error.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
     }
 }
 

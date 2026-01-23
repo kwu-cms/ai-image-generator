@@ -58,12 +58,40 @@ async function loadHistory() {
         }
 
         // 履歴の表示
-        historyList.innerHTML = data.history.map((item, index) => `
+        historyList.innerHTML = data.history.map((item, index) => {
+            // 参照画像の表示
+            let referenceImagesHtml = '';
+            if (item.reference_images && item.reference_images.length > 0) {
+                referenceImagesHtml = `
+                    <div class="mt-2 pt-2 border-top">
+                        <small class="text-muted d-block mb-2">参照画像:</small>
+                        <div class="d-flex flex-wrap gap-2">
+                            ${item.reference_images.map(ref => `
+                                <div class="position-relative" style="width: 60px; height: 60px;">
+                                    <img src="${window.API_BASE_URL}${ref.image_url}" 
+                                         alt="${escapeHtml(ref.role_label)}" 
+                                         class="img-thumbnail rounded" 
+                                         style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;"
+                                         onclick="showImageModal('${window.API_BASE_URL}${ref.image_url}', '${escapeHtml(ref.role_label)}')"
+                                         title="${escapeHtml(ref.role_label)}">
+                                    <small class="position-absolute bottom-0 start-0 end-0 bg-dark bg-opacity-75 text-white text-center" 
+                                           style="font-size: 0.6rem; padding: 1px;">
+                                        ${escapeHtml(ref.role_label)}
+                                    </small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
             <div class="col-md-6 col-lg-4">
                 <div class="card h-100 shadow-custom history-card fade-in-up" style="animation-delay: ${index * 0.1}s;">
                     <img src="${window.API_BASE_URL}${item.image_url}" class="card-img-top" alt="生成された画像" loading="lazy" style="object-fit: cover; height: 250px;" />
                     <div class="card-body d-flex flex-column">
                         <p class="prompt-quote mb-3 flex-grow-1">${escapeHtml(item.prompt)}</p>
+                        ${referenceImagesHtml}
                         <div class="mt-auto pt-3 border-top">
                             <small class="text-muted d-block">
                                 ${formatDate(item.created_at)}
@@ -75,7 +103,8 @@ async function loadHistory() {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         historyContainer.style.display = 'block';
 
@@ -121,4 +150,44 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * 画像モーダルを表示
+ */
+function showImageModal(imageUrl, title) {
+    // シンプルなモーダルを作成
+    const modalHtml = `
+        <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="imageModalLabel">${escapeHtml(title)}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <img src="${imageUrl}" class="img-fluid" alt="${escapeHtml(title)}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 既存のモーダルを削除
+    const existingModal = document.getElementById('imageModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // 新しいモーダルを追加
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // モーダルを表示
+    const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+    modal.show();
+    
+    // モーダルが閉じられたら削除
+    document.getElementById('imageModal').addEventListener('hidden.bs.modal', function () {
+        this.remove();
+    });
 }

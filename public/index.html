@@ -119,6 +119,26 @@
                                 required></textarea>
                             <small class="form-text">できるだけ具体的に描写してください</small>
                         </div>
+
+                        <!-- 参照画像セクション -->
+                        <div class="form-group mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label class="form-label mb-0">
+                                    参照画像（オプション）
+                                </label>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="addReferenceImageBtn">
+                                    <svg class="icon icon-only me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                    </svg>
+                                    参照画像を追加
+                                </button>
+                            </div>
+                            <small class="form-text d-block mb-3">最大5枚まで追加できます。各画像に役割を指定してください。</small>
+                            <div id="referenceImagesContainer">
+                                <!-- 参照画像スロットがここに動的に追加されます -->
+                            </div>
+                        </div>
+
                         <button type="submit" id="generateBtn" class="btn btn-primary btn-lg">
                             <span id="generateBtnIcon"></span>画像を生成
                         </button>
@@ -180,6 +200,41 @@
         <footer class="text-center text-muted mt-5 py-3">
             <p>&copy; 2024 Gen-Image.ai</p>
         </footer>
+    </div>
+
+    <!-- 既存画像選択モーダル -->
+    <div class="modal fade" id="selectExistingImageModal" tabindex="-1" aria-labelledby="selectExistingImageModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="selectExistingImageModalLabel">既存の参照画像から選択</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">表示範囲</label>
+                        <select class="form-select" id="visibilityFilter">
+                            <option value="">全て</option>
+                            <option value="private">自分の画像</option>
+                            <option value="class_shared">クラス共有</option>
+                            <option value="teacher_sample">教員固定サンプル</option>
+                        </select>
+                    </div>
+                    <div id="existingImagesLoading" class="text-center py-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">読み込み中...</span>
+                        </div>
+                    </div>
+                    <div id="existingImagesList" class="row g-2"></div>
+                    <div id="existingImagesEmpty" class="text-center py-3 text-muted" style="display: none;">
+                        参照画像がありません
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap 5 JS -->

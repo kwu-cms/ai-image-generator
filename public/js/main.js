@@ -62,11 +62,356 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (form) {
             form.addEventListener('submit', handleSubmit);
         }
+        
+        // 参照画像追加ボタンのイベントリスナー
+        const addRefBtn = document.getElementById('addReferenceImageBtn');
+        if (addRefBtn) {
+            addRefBtn.addEventListener('click', addReferenceImageSlot);
+        }
     }
     
     // 画像一覧を読み込み（ログイン状態に関わらず表示）
     loadAllImages();
 });
+
+// 参照画像スロットの管理
+let referenceImageSlots = [];
+const MAX_REFERENCE_IMAGES = 5;
+const ROLE_OPTIONS = ['構図', 'スタイル', '色調', '質感', 'ディテール', 'その他'];
+
+/**
+ * 参照画像スロットを追加
+ */
+function addReferenceImageSlot() {
+    if (referenceImageSlots.length >= MAX_REFERENCE_IMAGES) {
+        alert(`参照画像は最大${MAX_REFERENCE_IMAGES}枚まで追加できます`);
+        return;
+    }
+
+    const slotId = `ref-image-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const container = document.getElementById('referenceImagesContainer');
+    
+    const slotHtml = `
+        <div class="card mb-3 reference-image-slot" data-slot-id="${slotId}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h6 class="mb-0">参照画像 ${referenceImageSlots.length + 1}</h6>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-slot-btn">
+                        <svg class="icon icon-only" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small">画像を選択</label>
+                        <div class="d-flex gap-2">
+                            <input type="file" class="form-control form-control-sm ref-image-file" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary upload-ref-btn">ファイルを選択</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary select-existing-btn">既存から選択</button>
+                        </div>
+                        <div class="ref-image-preview mt-2" style="display: none;">
+                            <img src="" alt="プレビュー" class="img-thumbnail" style="max-width: 200px; max-height: 200px;">
+                        </div>
+                        <input type="hidden" class="ref-image-id">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">役割ラベル</label>
+                        <select class="form-select form-select-sm ref-role-select">
+                            ${ROLE_OPTIONS.map(role => `<option value="${role}">${role}</option>`).join('')}
+                        </select>
+                        <input type="text" class="form-control form-control-sm mt-2 ref-role-custom" placeholder="カスタム役割（その他を選択時）" style="display: none;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', slotHtml);
+    
+    const slotElement = container.querySelector(`[data-slot-id="${slotId}"]`);
+    const slot = {
+        id: slotId,
+        element: slotElement,
+        referenceImageId: null,
+        file: null,
+        role: ROLE_OPTIONS[0]
+    };
+    
+    referenceImageSlots.push(slot);
+    
+    // イベントリスナーの設定
+    setupSlotEventListeners(slot);
+    
+    // 追加ボタンの状態を更新
+    updateAddButtonState();
+}
+
+/**
+ * スロットのイベントリスナーを設定
+ */
+function setupSlotEventListeners(slot) {
+    const element = slot.element;
+    
+    // 削除ボタン
+    const removeBtn = element.querySelector('.remove-slot-btn');
+    removeBtn.addEventListener('click', () => removeReferenceImageSlot(slot.id));
+    
+    // ファイル選択ボタン
+    const uploadBtn = element.querySelector('.upload-ref-btn');
+    const fileInput = element.querySelector('.ref-image-file');
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    
+    // ファイル選択
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            await handleFileUpload(slot, file);
+        }
+    });
+    
+    // 既存画像選択ボタン
+    const selectExistingBtn = element.querySelector('.select-existing-btn');
+    selectExistingBtn.addEventListener('click', () => {
+        window.currentSelectingSlot = slot;
+        showExistingImageModal(slot);
+    });
+    
+    // 役割選択
+    const roleSelect = element.querySelector('.ref-role-select');
+    roleSelect.addEventListener('change', (e) => {
+        slot.role = e.target.value;
+        const customInput = element.querySelector('.ref-role-custom');
+        if (e.target.value === 'その他') {
+            customInput.style.display = 'block';
+        } else {
+            customInput.style.display = 'none';
+        }
+    });
+    
+    // カスタム役割入力
+    const customRoleInput = element.querySelector('.ref-role-custom');
+    customRoleInput.addEventListener('input', (e) => {
+        if (slot.role === 'その他') {
+            slot.role = e.target.value || 'その他';
+        }
+    });
+}
+
+/**
+ * ファイルアップロード処理
+ */
+async function handleFileUpload(slot, file) {
+    // ファイルサイズチェック（最大10MB）
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+        alert('画像ファイルのサイズが大きすぎます（最大10MB）');
+        return;
+    }
+    
+    // ファイル形式チェック
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+        alert('サポートされていない画像形式です（PNG、JPEG、WebPのみ）');
+        return;
+    }
+    
+    try {
+        // プレビュー表示
+        const preview = slot.element.querySelector('.ref-image-preview img');
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            preview.src = e.target.result;
+            slot.element.querySelector('.ref-image-preview').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        
+        // APIにアップロード
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('visibility', 'private');
+        
+        const response = await fetch(`${window.API_BASE_URL}/api/reference-images/upload`, {
+            method: 'POST',
+            credentials: 'include',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'アップロードに失敗しました' }));
+            throw new Error(errorData.error || 'アップロードに失敗しました');
+        }
+        
+        const data = await response.json();
+        slot.referenceImageId = data.reference_image_id;
+        slot.element.querySelector('.ref-image-id').value = data.reference_image_id;
+        
+        // プレビューを更新
+        preview.src = `${window.API_BASE_URL}${data.image_url}`;
+        
+    } catch (error) {
+        console.error('File upload error:', error);
+        alert(`画像のアップロードに失敗しました: ${error.message}`);
+    }
+}
+
+/**
+ * 既存画像選択モーダルを表示
+ */
+function showExistingImageModal(slot) {
+    const modal = new bootstrap.Modal(document.getElementById('selectExistingImageModal'));
+    const currentSlot = slot;
+    
+    // モーダルが開かれたときに画像一覧を読み込む
+    const modalElement = document.getElementById('selectExistingImageModal');
+    const loadImages = async () => {
+        await loadExistingReferenceImages(currentSlot);
+    };
+    
+    modalElement.addEventListener('shown.bs.modal', loadImages, { once: true });
+    modal.show();
+}
+
+/**
+ * 既存の参照画像一覧を読み込む
+ */
+async function loadExistingReferenceImages(targetSlot) {
+    const loading = document.getElementById('existingImagesLoading');
+    const list = document.getElementById('existingImagesList');
+    const empty = document.getElementById('existingImagesEmpty');
+    const visibilityFilter = document.getElementById('visibilityFilter');
+    
+    loading.style.display = 'block';
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    
+    try {
+        const visibility = visibilityFilter.value || '';
+        const url = `${window.API_BASE_URL}/api/reference-images${visibility ? `?visibility=${visibility}` : ''}`;
+        
+        const response = await fetch(url, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('参照画像一覧の取得に失敗しました');
+        }
+        
+        const data = await response.json();
+        loading.style.display = 'none';
+        
+        if (!data.reference_images || data.reference_images.length === 0) {
+            empty.style.display = 'block';
+            return;
+        }
+        
+        list.innerHTML = data.reference_images.map(img => `
+            <div class="col-md-3 col-sm-4 col-6">
+                <div class="card h-100 existing-ref-image-card" style="cursor: pointer;" 
+                     data-image-id="${img.id}" 
+                     data-image-url="${img.image_url}">
+                    <img src="${window.API_BASE_URL}${img.image_url}" 
+                         class="card-img-top" 
+                         alt="参照画像" 
+                         style="height: 120px; object-fit: cover;">
+                    <div class="card-body p-2">
+                        <small class="text-muted d-block text-truncate" title="${img.visibility}">
+                            ${img.visibility === 'private' ? '自分の画像' : 
+                              img.visibility === 'class_shared' ? 'クラス共有' : 
+                              img.visibility === 'teacher_sample' ? '教員固定サンプル' : img.visibility}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        // 画像カードのクリックイベント
+        list.querySelectorAll('.existing-ref-image-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const imageId = card.dataset.imageId;
+                const imageUrl = card.dataset.imageUrl;
+                selectExistingImage(targetSlot, imageId, imageUrl);
+                
+                // モーダルを閉じる
+                const modal = bootstrap.Modal.getInstance(document.getElementById('selectExistingImageModal'));
+                modal.hide();
+            });
+        });
+        
+    } catch (error) {
+        console.error('Error loading existing images:', error);
+        loading.style.display = 'none';
+        list.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+    }
+}
+
+/**
+ * 既存画像を選択
+ */
+function selectExistingImage(slot, imageId, imageUrl) {
+    slot.referenceImageId = imageId;
+    slot.element.querySelector('.ref-image-id').value = imageId;
+    
+    // プレビューを更新
+    const preview = slot.element.querySelector('.ref-image-preview img');
+    preview.src = `${window.API_BASE_URL}${imageUrl}`;
+    slot.element.querySelector('.ref-image-preview').style.display = 'block';
+}
+
+// 表示範囲フィルターの変更イベント
+document.addEventListener('DOMContentLoaded', () => {
+    const visibilityFilter = document.getElementById('visibilityFilter');
+    if (visibilityFilter) {
+        visibilityFilter.addEventListener('change', () => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('selectExistingImageModal'));
+            if (modal && modal._isShown) {
+                // モーダルが開いている場合のみ再読み込み
+                const targetSlot = window.currentSelectingSlot;
+                if (targetSlot) {
+                    loadExistingReferenceImages(targetSlot);
+                }
+            }
+        });
+    }
+});
+
+/**
+ * 参照画像スロットを削除
+ */
+function removeReferenceImageSlot(slotId) {
+    const index = referenceImageSlots.findIndex(s => s.id === slotId);
+    if (index === -1) return;
+    
+    referenceImageSlots[index].element.remove();
+    referenceImageSlots.splice(index, 1);
+    
+    // スロット番号を更新
+    updateSlotNumbers();
+    updateAddButtonState();
+}
+
+/**
+ * スロット番号を更新
+ */
+function updateSlotNumbers() {
+    referenceImageSlots.forEach((slot, index) => {
+        const title = slot.element.querySelector('h6');
+        if (title) {
+            title.textContent = `参照画像 ${index + 1}`;
+        }
+    });
+}
+
+/**
+ * 追加ボタンの状態を更新
+ */
+function updateAddButtonState() {
+    const addBtn = document.getElementById('addReferenceImageBtn');
+    if (addBtn) {
+        addBtn.disabled = referenceImageSlots.length >= MAX_REFERENCE_IMAGES;
+    }
+}
 
 /**
  * フォーム送信処理
@@ -88,6 +433,19 @@ async function handleSubmit(event) {
         return;
     }
 
+    // 参照画像のバリデーション
+    const invalidSlots = referenceImageSlots.filter(slot => {
+        const roleSelect = slot.element.querySelector('.ref-role-select');
+        const customRoleInput = slot.element.querySelector('.ref-role-custom');
+        const role = roleSelect.value === 'その他' ? (customRoleInput.value || 'その他') : roleSelect.value;
+        return !slot.referenceImageId || !role;
+    });
+
+    if (invalidSlots.length > 0) {
+        showError('参照画像が選択されていないか、役割ラベルが設定されていないスロットがあります');
+        return;
+    }
+
     // UIのリセット
     errorSection.style.display = 'none';
     resultSection.style.display = 'none';
@@ -95,14 +453,37 @@ async function handleSubmit(event) {
     generateBtn.textContent = '生成中...';
 
     try {
+        // 参照画像情報を収集
+        const referenceImages = referenceImageSlots
+            .filter(slot => slot.referenceImageId)
+            .map(slot => {
+                const roleSelect = slot.element.querySelector('.ref-role-select');
+                const customRoleInput = slot.element.querySelector('.ref-role-custom');
+                const role = roleSelect.value === 'その他' ? (customRoleInput.value || 'その他') : roleSelect.value;
+                return {
+                    id: slot.referenceImageId,
+                    role: role
+                };
+            });
+
         // APIリクエスト
+        const requestBody = {
+            prompt: prompt,
+            referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+            generationOptions: {
+                size: '1024x1024',
+                quality: 'standard',
+                style: 'vivid'
+            }
+        };
+
         const response = await fetch(`${window.API_BASE_URL}/api/generate`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             credentials: 'include',
-            body: JSON.stringify({ prompt }),
+            body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -126,56 +507,52 @@ async function handleSubmit(event) {
         // 結果の表示
         resultImageContainer.innerHTML = `
             <div class="fade-in-up animate-in">
-                <img src="${imageUrl}" class="img-fluid rounded-3 shadow-custom" alt="生成された画像" 
-                     onload="
-                        console.log('Image loaded successfully:', this.src);
-                        const timingInfo = document.getElementById('timingInfo');
-                        if (timingInfo) timingInfo.style.display='block';
-                        // フェードインアニメーションを適用（既に追加されているが、念のため）
-                        const fadeInElement = this.closest('.fade-in-up');
-                        if (fadeInElement) {
-                            fadeInElement.classList.add('animate-in');
-                        }
-                     "
-                     onerror="
-                        console.error('画像の読み込みに失敗しました:', this.src);
-                        const fadeInElement = this.closest('.fade-in-up');
-                        if (fadeInElement) {
-                            fadeInElement.innerHTML = '<div class=\"alert alert-danger\">画像の読み込みに失敗しました。画像URLを確認してください。</div>';
-                        }
-                     " />
+                <img src="${escapeHtml(imageUrl)}" class="img-fluid rounded-3 shadow-custom" alt="生成された画像" />
             </div>
         `;
         
-        // 即座にアニメーションクラスを追加（HTMLに既に含まれているが、念のため）
+        // 画像要素を取得
         const fadeInElement = resultImageContainer.querySelector('.fade-in-up');
+        const img = fadeInElement?.querySelector('img');
+        
+        if (img) {
+            // 画像読み込み成功時の処理
+            img.addEventListener('load', () => {
+                console.log('Image loaded successfully:', img.src);
+                const timingInfo = document.getElementById('timingInfo');
+                if (timingInfo) {
+                    timingInfo.style.display = 'block';
+                }
+                // フェードインアニメーションを適用
+                if (fadeInElement) {
+                    fadeInElement.classList.add('animate-in');
+                }
+            });
+            
+            // 画像読み込み失敗時の処理
+            img.addEventListener('error', () => {
+                console.error('画像の読み込みに失敗しました:', img.src);
+                if (fadeInElement) {
+                    fadeInElement.innerHTML = '<div class="alert alert-danger">画像の読み込みに失敗しました。画像URLを確認してください。</div>';
+                }
+            });
+            
+            // 既に読み込まれている場合（キャッシュされている場合など）
+            if (img.complete && img.naturalHeight !== 0) {
+                const timingInfo = document.getElementById('timingInfo');
+                if (timingInfo) {
+                    timingInfo.style.display = 'block';
+                }
+                if (fadeInElement) {
+                    fadeInElement.classList.add('animate-in');
+                }
+            }
+        }
+        
+        // アニメーションクラスを追加
         if (fadeInElement) {
             fadeInElement.classList.add('animate-in');
         }
-        
-        // 画像が既に読み込まれている場合のフォールバック（キャッシュされている場合など）
-        // また、アニメーションが確実に実行されるように強制的にanimate-inクラスを追加
-        setTimeout(() => {
-            const fadeInElement = resultImageContainer.querySelector('.fade-in-up');
-            const img = fadeInElement?.querySelector('img');
-            console.log('Checking image load status:', {
-                fadeInElement: fadeInElement,
-                img: img,
-                imgComplete: img?.complete,
-                imgSrc: img?.src
-            });
-            
-            if (fadeInElement) {
-                // アニメーションクラスを強制的に追加
-                fadeInElement.classList.add('animate-in');
-                console.log('Added animate-in class to fadeInElement');
-            }
-            
-            if (img && img.complete) {
-                const timingInfo = document.getElementById('timingInfo');
-                if (timingInfo) timingInfo.style.display = 'block';
-            }
-        }, 200);
 
         let timingHtml = '';
         if (data.timing) {
@@ -201,13 +578,35 @@ async function handleSubmit(event) {
         console.log('data.prompt:', data.prompt);
         console.log('timingHtml:', timingHtml);
         
+        // 参照画像情報の表示
+        let referenceImagesHtml = '';
+        if (data.reference_images && data.reference_images.length > 0) {
+            referenceImagesHtml = `
+                <div class="mt-3 fade-in-up">
+                    <p class="mb-2">
+                        <strong class="text-gradient">参照画像:</strong>
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        ${data.reference_images.map(ref => `
+                            <div class="border rounded p-2" style="max-width: 150px;">
+                                <img src="${window.API_BASE_URL}${ref.image_url}" alt="${ref.role_label}" 
+                                     class="img-thumbnail mb-1" style="width: 100%; height: 100px; object-fit: cover;">
+                                <small class="d-block text-center">${escapeHtml(ref.role_label)}</small>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
         resultPrompt.innerHTML = `
             <div class="fade-in-up">
                 <p class="mb-2">
                     <strong class="text-gradient">プロンプト:</strong>
                 </p>
-                <p class="prompt-quote mb-0">${escapeHtml(data.prompt)}</p>
+                <p class="prompt-quote mb-0">${escapeHtml(data.original_prompt || data.prompt)}</p>
             </div>
+            ${referenceImagesHtml}
             ${timingHtml}
         `;
         
@@ -227,6 +626,11 @@ async function handleSubmit(event) {
 
         // フォームをリセット
         document.getElementById('prompt').value = '';
+        
+        // 参照画像スロットをクリア
+        referenceImageSlots.forEach(slot => slot.element.remove());
+        referenceImageSlots = [];
+        updateAddButtonState();
 
     } catch (error) {
         console.error('Error:', error);
