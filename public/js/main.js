@@ -79,6 +79,19 @@ let referenceImageSlots = [];
 const MAX_REFERENCE_IMAGES = 5;
 const ROLE_OPTIONS = ['構図', 'スタイル', '色調', '質感', 'ディテール', 'その他'];
 
+// Stability AI APIで許可された画像サイズ（stable-diffusion-xl-1024-v1-0）
+const ALLOWED_DIMENSIONS = [
+    { width: 1024, height: 1024 },
+    { width: 1152, height: 896 },
+    { width: 1216, height: 832 },
+    { width: 1344, height: 768 },
+    { width: 1536, height: 640 },
+    { width: 640, height: 1536 },
+    { width: 768, height: 1344 },
+    { width: 832, height: 1216 },
+    { width: 896, height: 1152 },
+];
+
 /**
  * 参照画像スロットを追加
  */
@@ -200,6 +213,182 @@ function setupSlotEventListeners(slot) {
 }
 
 /**
+ * 画像のサイズを取得
+ */
+function getImageSize(file) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve({ width: img.width, height: img.height });
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('画像の読み込みに失敗しました'));
+        };
+        
+        img.src = url;
+    });
+}
+
+/**
+ * 許可されたサイズに最も近いサイズを選択（アスペクト比を維持）
+ */
+function findClosestAllowedSize(width, height) {
+    const aspectRatio = width / height;
+    let bestMatch = null;
+    let minDiff = Infinity;
+    
+    for (const dim of ALLOWED_DIMENSIONS) {
+        const dimAspectRatio = dim.width / dim.height;
+        const diff = Math.abs(dimAspectRatio - aspectRatio);
+        
+        if (diff < minDiff) {
+            minDiff = diff;
+            bestMatch = dim;
+        }
+    }
+    
+    return bestMatch || ALLOWED_DIMENSIONS[0]; // フォールバック
+}
+
+/**
+ * Canvas APIを使用して画像をリサイズ
+ */
+function resizeImage(file, targetWidth, targetHeight) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            
+            // Canvasを作成
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const ctx = canvas.getContext('2d');
+            
+            // 高品質なリサイズ（smooth scaling）
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // 画像を描画（レターボックス方式で中央配置）
+            const sourceAspect = img.width / img.height;
+            const targetAspect = targetWidth / targetHeight;
+            
+            let drawWidth, drawHeight, drawX, drawY;
+            
+            if (sourceAspect > targetAspect) {
+                // 元画像の方が横長 → 高さを合わせる
+                drawHeight = targetHeight;
+                drawWidth = drawHeight * sourceAspect;
+                drawX = (targetWidth - drawWidth) / 2;
+                drawY = 0;
+            } else {
+                // 元画像の方が縦長 → 幅を合わせる
+                drawWidth = targetWidth;
+                drawHeight = drawWidth / sourceAspect;
+                drawX = 0;
+                drawY = (targetHeight - drawHeight) / 2;
+            }
+            
+            // 背景を白で塗りつぶし
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
+            
+            // 画像を描画
+            ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+            
+            // CanvasをBlobに変換（PNG形式で出力）
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    // PNG形式で保存（OpenAI DALL-E 2のEdit API要件）
+                    const fileName = file.name.replace(/\.[^/.]+$/, '') + '.png';
+                    const resizedFile = new File([blob], fileName, {
+                        type: 'image/png',
+                        lastModified: Date.now()
+                    });
+                    resolve(resizedFile);
+                } else {
+                    reject(new Error('画像のリサイズに失敗しました'));
+                }
+            }, 'image/png', 0.95); // PNG形式、品質95%
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('画像の読み込みに失敗しました'));
+        };
+        
+        img.src = url;
+    });
+}
+
+/**
+ * 画像をPNG形式に変換し、4MB以下に圧縮
+ * OpenAI DALL-E 2のEdit API要件: PNG形式、4MB以下
+ */
+function convertToPNGAndCompress(file, maxSizeMB = 4) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            
+            // Canvasを作成（元のサイズを維持）
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            
+            // 画像を描画
+            ctx.drawImage(img, 0, 0);
+            
+            // 品質を調整しながら4MB以下になるまで圧縮
+            let quality = 0.95;
+            const maxSize = maxSizeMB * 1024 * 1024;
+            
+            const tryCompress = () => {
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        reject(new Error('画像の変換に失敗しました'));
+                        return;
+                    }
+                    
+                    // サイズチェック
+                    if (blob.size <= maxSize || quality <= 0.1) {
+                        const fileName = file.name.replace(/\.[^/.]+$/, '') + '.png';
+                        const convertedFile = new File([blob], fileName, {
+                            type: 'image/png',
+                            lastModified: Date.now()
+                        });
+                        resolve(convertedFile);
+                    } else {
+                        // 品質を下げて再試行
+                        quality -= 0.1;
+                        canvas.toBlob(tryCompress, 'image/png', quality);
+                    }
+                }, 'image/png', quality);
+            };
+            
+            tryCompress();
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('画像の読み込みに失敗しました'));
+        };
+        
+        img.src = url;
+    });
+}
+
+/**
  * ファイルアップロード処理
  */
 async function handleFileUpload(slot, file) {
@@ -218,6 +407,51 @@ async function handleFileUpload(slot, file) {
     }
     
     try {
+        // 画像サイズをチェック
+        const imageSize = await getImageSize(file);
+        const isAllowedSize = ALLOWED_DIMENSIONS.some(
+            dim => dim.width === imageSize.width && dim.height === imageSize.height
+        );
+        
+        let fileToUpload = file;
+        let resizeInfo = null;
+        
+        // 許可されていないサイズの場合はリサイズ
+        if (!isAllowedSize) {
+            const closestSize = findClosestAllowedSize(imageSize.width, imageSize.height);
+            console.log('Resizing image:', {
+                original: `${imageSize.width}x${imageSize.height}`,
+                target: `${closestSize.width}x${closestSize.height}`
+            });
+            
+            // リサイズ処理（PNG形式で出力）
+            fileToUpload = await resizeImage(file, closestSize.width, closestSize.height);
+            resizeInfo = {
+                original: `${imageSize.width}x${imageSize.height}`,
+                resized: `${closestSize.width}x${closestSize.height}`
+            };
+        }
+        
+        // OpenAI DALL-E 2のEdit API要件: PNG形式、4MB以下
+        // JPEGやWebPの場合はPNGに変換し、4MB以下に圧縮
+        if (fileToUpload.type !== 'image/png' || fileToUpload.size > 4 * 1024 * 1024) {
+            console.log('Converting to PNG and compressing:', {
+                originalType: fileToUpload.type,
+                originalSize: `${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`
+            });
+            
+            try {
+                fileToUpload = await convertToPNGAndCompress(fileToUpload, 4);
+                console.log('Converted to PNG:', {
+                    newSize: `${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`
+                });
+            } catch (error) {
+                console.error('PNG conversion error:', error);
+                alert('画像の変換に失敗しました。PNG形式の画像をアップロードしてください。');
+                return;
+            }
+        }
+        
         // プレビュー表示
         const preview = slot.element.querySelector('.ref-image-preview img');
         const reader = new FileReader();
@@ -225,11 +459,11 @@ async function handleFileUpload(slot, file) {
             preview.src = e.target.result;
             slot.element.querySelector('.ref-image-preview').style.display = 'block';
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(fileToUpload);
         
         // APIにアップロード
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', fileToUpload);
         formData.append('visibility', 'private');
         
         const response = await fetch(`${window.API_BASE_URL}/api/reference-images/upload`, {
@@ -249,6 +483,30 @@ async function handleFileUpload(slot, file) {
         
         // プレビューを更新
         preview.src = `${window.API_BASE_URL}${data.image_url}`;
+        
+        // リサイズ情報がある場合は表示
+        if (resizeInfo) {
+            const infoHtml = `
+                <div class="alert alert-info alert-dismissible fade show mt-2" role="alert">
+                    <strong>情報:</strong> 画像を ${resizeInfo.original} から ${resizeInfo.resized} にリサイズしました。
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            const previewContainer = slot.element.querySelector('.ref-image-preview');
+            previewContainer.insertAdjacentHTML('afterend', infoHtml);
+        }
+        
+        // サイズ警告がある場合は表示（サーバー側からの警告）
+        if (data.size_warning) {
+            const warningHtml = `
+                <div class="alert alert-warning alert-dismissible fade show mt-2" role="alert">
+                    <strong>警告:</strong> ${data.size_warning.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            const previewContainer = slot.element.querySelector('.ref-image-preview');
+            previewContainer.insertAdjacentHTML('afterend', warningHtml);
+        }
         
     } catch (error) {
         console.error('File upload error:', error);
@@ -295,7 +553,8 @@ async function loadExistingReferenceImages(targetSlot) {
         });
         
         if (!response.ok) {
-            throw new Error('参照画像一覧の取得に失敗しました');
+            const errorData = await response.json().catch(() => ({ error: '参照画像一覧の取得に失敗しました' }));
+            throw new Error(errorData.error || '参照画像一覧の取得に失敗しました');
         }
         
         const data = await response.json();
@@ -466,13 +725,17 @@ async function handleSubmit(event) {
                 };
             });
 
+        // 品質設定を取得
+        const qualitySelect = document.getElementById('qualitySelect');
+        const selectedQuality = qualitySelect ? qualitySelect.value : 'high';
+
         // APIリクエスト
         const requestBody = {
             prompt: prompt,
             referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
             generationOptions: {
                 size: '1024x1024',
-                quality: 'standard',
+                quality: selectedQuality,  // UIから選択された品質を使用
                 style: 'vivid'
             }
         };
@@ -488,7 +751,10 @@ async function handleSubmit(event) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
-            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            console.error('Image generation error:', errorData);
+            const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+            const errorDetails = errorData.details ? ` (詳細: ${errorData.details})` : '';
+            throw new Error(errorMessage + errorDetails);
         }
 
         const data = await response.json();
@@ -498,18 +764,52 @@ async function handleSubmit(event) {
         // 結果セクションを先に表示（非表示から表示に変更）
         resultSection.style.display = 'block';
         
+        // 編集モード表示を追加
+        let modeInfoHtml = '';
+        if (data.model_provider && data.edit_mode) {
+            const modeLabels = {
+                'generate': '生成モード（OpenAI）',
+                'edit': '編集モード（OpenAI）',
+                'variation': 'バリエーションモード（OpenAI）',
+                'text-to-image': '生成モード（Stability AI）',
+                'image-to-image': '編集モード（Stability AI）'
+            };
+            const providerLabels = {
+                'openai': 'OpenAI',
+                'stability': 'Stability AI'
+            };
+            const modeLabel = modeLabels[data.edit_mode] || `${data.edit_mode}（${providerLabels[data.model_provider] || data.model_provider}）`;
+            modeInfoHtml = `
+                <div class="alert alert-info mb-3">
+                    <small><strong>処理モード:</strong> ${escapeHtml(modeLabel)}</small>
+                </div>
+            `;
+        }
+        
         // 画像URLの確認
         const imageUrl = `${window.API_BASE_URL}${data.image_url}`;
         console.log('Image URL:', imageUrl);
         console.log('resultImageContainer:', resultImageContainer);
         console.log('data.image_url:', data.image_url);
         
-        // 結果の表示
-        resultImageContainer.innerHTML = `
-            <div class="fade-in-up animate-in">
-                <img src="${escapeHtml(imageUrl)}" class="img-fluid rounded-3 shadow-custom" alt="生成された画像" />
-            </div>
-        `;
+        // 参照画像がある場合は比較UI、ない場合は通常表示
+        if (data.reference_images && data.reference_images.length > 0) {
+            // 参照画像がある場合: 比較UIを表示（参照画像セクションで表示）
+            resultImageContainer.innerHTML = `
+                <div class="fade-in-up animate-in">
+                    <p class="text-muted mb-3">生成された画像は下の「参照画像との比較」セクションで確認できます。</p>
+                </div>
+            `;
+        } else {
+            // 参照画像がない場合: 通常表示
+            resultImageContainer.innerHTML = `
+                <div class="fade-in-up animate-in">
+                    <img src="${escapeHtml(imageUrl)}" class="img-fluid rounded-3 shadow-custom" alt="生成された画像" 
+                         style="cursor: pointer;"
+                         onclick="showImageModal('${escapeHtml(imageUrl)}', '生成された画像')" />
+                </div>
+            `;
+        }
         
         // 画像要素を取得
         const fadeInElement = resultImageContainer.querySelector('.fade-in-up');
@@ -578,34 +878,93 @@ async function handleSubmit(event) {
         console.log('data.prompt:', data.prompt);
         console.log('timingHtml:', timingHtml);
         
-        // 参照画像情報の表示
+        // モード情報と参照画像情報の表示（比較用に大きく表示）
         let referenceImagesHtml = '';
         if (data.reference_images && data.reference_images.length > 0) {
+            // 参照画像がある場合: 比較UIを表示（imageUrlは既に定義済み）
             referenceImagesHtml = `
-                <div class="mt-3 fade-in-up">
-                    <p class="mb-2">
-                        <strong class="text-gradient">参照画像:</strong>
-                    </p>
-                    <div class="d-flex flex-wrap gap-2">
-                        ${data.reference_images.map(ref => `
-                            <div class="border rounded p-2" style="max-width: 150px;">
-                                <img src="${window.API_BASE_URL}${ref.image_url}" alt="${ref.role_label}" 
-                                     class="img-thumbnail mb-1" style="width: 100%; height: 100px; object-fit: cover;">
-                                <small class="d-block text-center">${escapeHtml(ref.role_label)}</small>
+                <div class="mt-4 fade-in-up">
+                    <h5 class="mb-3">
+                        <strong class="text-gradient">参照画像との比較</strong>
+                    </h5>
+                    <div class="row g-3">
+                        ${data.reference_images.map((ref, index) => `
+                            <div class="col-md-${data.reference_images.length === 1 ? '6' : '4'}">
+                                <div class="card h-100">
+                                    <div class="card-header bg-light">
+                                        <strong>参照画像 ${index + 1}</strong>
+                                        <span class="badge bg-primary ms-2">${escapeHtml(ref.role_label)}</span>
+                                    </div>
+                                    <div class="card-body p-2 text-center">
+                                        <img src="${window.API_BASE_URL}${ref.image_url}" 
+                                             alt="${ref.role_label}" 
+                                             class="img-fluid rounded"
+                                             style="max-height: 400px; width: 100%; object-fit: contain; cursor: pointer;"
+                                             onclick="showImageModal('${window.API_BASE_URL}${ref.image_url}', '参照画像 ${index + 1} (${escapeHtml(ref.role_label)})')">
+                                    </div>
+                                </div>
                             </div>
                         `).join('')}
+                        <div class="col-md-${data.reference_images.length === 1 ? '6' : '4'}">
+                            <div class="card h-100 border-success border-2">
+                                <div class="card-header bg-success text-white">
+                                    <strong>生成された画像</strong>
+                                </div>
+                                <div class="card-body p-2 text-center">
+                                    <img src="${escapeHtml(imageUrl)}" 
+                                         alt="生成された画像" 
+                                         class="img-fluid rounded"
+                                         style="max-height: 400px; width: 100%; object-fit: contain; cursor: pointer;"
+                                         onclick="showImageModal('${escapeHtml(imageUrl)}', '生成された画像')">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
+        // プロンプト表示（日本語と英語の両方）
+        let promptHtml = '';
+        if (data.original_prompt && data.translated_prompt) {
+            // 日本語と英語の両方がある場合
+            promptHtml = `
+                <div class="fade-in-up">
+                    <p class="mb-2">
+                        <strong class="text-gradient">プロンプト（日本語）:</strong>
+                    </p>
+                    <p class="prompt-quote mb-3">${escapeHtml(data.original_prompt)}</p>
+                    <p class="mb-2">
+                        <strong class="text-gradient">プロンプト（英語）:</strong>
+                    </p>
+                    <p class="prompt-quote mb-0" style="font-style: italic; color: #666;">${escapeHtml(data.translated_prompt)}</p>
+                </div>
+            `;
+        } else if (data.original_prompt) {
+            // 日本語のみの場合
+            promptHtml = `
+                <div class="fade-in-up">
+                    <p class="mb-2">
+                        <strong class="text-gradient">プロンプト:</strong>
+                    </p>
+                    <p class="prompt-quote mb-0">${escapeHtml(data.original_prompt)}</p>
+                </div>
+            `;
+        } else {
+            // フォールバック
+            promptHtml = `
+                <div class="fade-in-up">
+                    <p class="mb-2">
+                        <strong class="text-gradient">プロンプト:</strong>
+                    </p>
+                    <p class="prompt-quote mb-0">${escapeHtml(data.prompt)}</p>
+                </div>
+            `;
+        }
+
         resultPrompt.innerHTML = `
-            <div class="fade-in-up">
-                <p class="mb-2">
-                    <strong class="text-gradient">プロンプト:</strong>
-                </p>
-                <p class="prompt-quote mb-0">${escapeHtml(data.original_prompt || data.prompt)}</p>
-            </div>
+            ${modeInfoHtml}
+            ${promptHtml}
             ${referenceImagesHtml}
             ${timingHtml}
         `;
@@ -793,4 +1152,44 @@ function formatDate(dateString) {
     const hours = parts.find(p => p.type === 'hour').value;
     const minutes = parts.find(p => p.type === 'minute').value;
     return `${year}/${month}/${day} ${hours}:${minutes}`;
+}
+
+/**
+ * 画像モーダルを表示
+ */
+function showImageModal(imageUrl, title) {
+    // シンプルなモーダルを作成
+    const modalHtml = `
+        <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="imageModalLabel">${escapeHtml(title)}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <img src="${imageUrl}" class="img-fluid" alt="${escapeHtml(title)}" style="max-height: 70vh;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 既存のモーダルを削除
+    const existingModal = document.getElementById('imageModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // 新しいモーダルを追加
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // モーダルを表示
+    const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+    modal.show();
+    
+    // モーダルが閉じられたら削除
+    document.getElementById('imageModal').addEventListener('hidden.bs.modal', function () {
+        this.remove();
+    });
 }

@@ -85,12 +85,34 @@ async function loadHistory() {
                 `;
             }
 
+            // プロンプト表示（日本語と英語の両方）
+            let promptHtml = '';
+            if (item.original_prompt && item.translated_prompt) {
+                promptHtml = `
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1"><strong>日本語:</strong></small>
+                        <p class="prompt-quote mb-2" style="font-size: 0.9rem;">${escapeHtml(item.original_prompt)}</p>
+                        <small class="text-muted d-block mb-1"><strong>英語:</strong></small>
+                        <p class="prompt-quote mb-0" style="font-size: 0.85rem; font-style: italic; color: #666;">${escapeHtml(item.translated_prompt)}</p>
+                    </div>
+                `;
+            } else {
+                promptHtml = `<p class="prompt-quote mb-0">${escapeHtml(item.prompt)}</p>`;
+            }
+
             return `
             <div class="col-md-6 col-lg-4">
                 <div class="card h-100 shadow-custom history-card fade-in-up" style="animation-delay: ${index * 0.1}s;">
-                    <img src="${window.API_BASE_URL}${item.image_url}" class="card-img-top" alt="生成された画像" loading="lazy" style="object-fit: cover; height: 250px;" />
+                    <img src="${window.API_BASE_URL}${item.image_url}" 
+                         class="card-img-top" 
+                         alt="生成された画像" 
+                         loading="lazy" 
+                         style="object-fit: cover; height: 250px; cursor: pointer;"
+                         onclick="showImageModal('${window.API_BASE_URL}${item.image_url}', '生成された画像')" />
                     <div class="card-body d-flex flex-column">
-                        <p class="prompt-quote mb-3 flex-grow-1">${escapeHtml(item.prompt)}</p>
+                        <div class="flex-grow-1 mb-3">
+                            ${promptHtml}
+                        </div>
                         ${referenceImagesHtml}
                         <div class="mt-auto pt-3 border-top">
                             <small class="text-muted d-block">

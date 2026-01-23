@@ -7,7 +7,10 @@
         "dev": "wrangler dev",
         "dev:pages": "wrangler pages dev public --proxy http://localhost:8787",
         "deploy": "wrangler deploy",
-        "pages:deploy": "wrangler pages deploy public"
+        "pages:deploy": "wrangler pages deploy public",
+        "copy-docs": "node scripts/copy-docs.js",
+        "predev": "npm run copy-docs",
+        "predeploy": "npm run copy-docs"
     },
     "keywords": [
         "cloudflare",

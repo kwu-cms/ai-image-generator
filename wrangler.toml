@@ -4,6 +4,10 @@ name = "image-generation-api"
 main = "src/worker.js"
 compatibility_date = "2024-01-01"
 
+# 静的ファイルの配信設定（開発環境用）
+[site]
+bucket = "./public"
+
 # D1データベース設定
 [[d1_databases]]
 binding = "DB"
@@ -17,12 +21,11 @@ bucket_name = "image-generation-storage"
 
 # Workers KV設定（セッション管理用）
 # ローカル開発: wrangler devで自動的にシミュレートされる
-# 本番環境: `wrangler kv:namespace create "SESSIONS"` で作成後、namespace_idを設定してください
+# 本番環境: `wrangler kv namespace create "SESSIONS"` で作成後、namespace_idを設定してください
 [[kv_namespaces]]
 binding = "SESSIONS"
-# ローカル開発では任意のIDで動作します（実際のIDは本番環境で設定）
-id = "00000000000000000000000000000000"
-preview_id = "00000000000000000000000000000000"
+id = "a0ed5a11ddae4005bdfd874c1c6b1edd"
+preview_id = "5bf8922fbc7d40f1a040c5c106c8b477"
 
 # 環境変数（Secretsは `wrangler secret put` で設定）
 # OPENAI_API_KEY - Workers Secretsで設定

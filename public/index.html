@@ -52,6 +52,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="guide.html">ガイド</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="docs.html">ドキュメント</a>
+                    </li>
                 </ul>
                 <div class="d-flex align-items-center">
                     <!-- ログイン済み: アカウントドロップダウン -->
@@ -137,6 +140,19 @@
                             <div id="referenceImagesContainer">
                                 <!-- 参照画像スロットがここに動的に追加されます -->
                             </div>
+                        </div>
+
+                        <!-- 品質設定セクション -->
+                        <div class="form-group mb-4">
+                            <label for="qualitySelect" class="form-label">
+                                生成品質
+                            </label>
+                            <select class="form-select" id="qualitySelect">
+                                <option value="standard">標準（Standard）- 高速、基本的な品質</option>
+                                <option value="high" selected>高品質（High）- 推奨、バランス良好</option>
+                                <option value="ultra">最高品質（Ultra）- 最高品質、処理時間が長い</option>
+                            </select>
+                            <small class="form-text">品質が高いほど詳細で高品質な画像が生成されますが、処理時間が長くなります。</small>
                         </div>
 
                         <button type="submit" id="generateBtn" class="btn btn-primary btn-lg">
